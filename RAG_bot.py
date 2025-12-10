@@ -1,14 +1,12 @@
-from typing import List
-from azure.storage.blob import BlobServiceClient, ContainerClient
+from azure.storage.blob import ContainerClient
 import os
-import pandas as pd 
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from azure.search.documents.models import VectorQuery
+from azure.search.documents.models import VectorizedQuery
 import re
 
 
@@ -65,12 +63,6 @@ def create_index_schema():
         fields=[
             SimpleField(name="id", type="Edm.String", key=True, filterable=True),
             SearchableField(name="content", type="Edm.String"),
-            # VectorField(
-            #     name="embedding",
-            #     searchable=True,
-            #     dimensions=vector_dimensions,
-            #     vector_search_configuration="my-vector-config"
-            # )
             SearchField(
                 name="embedding",
                 type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
@@ -91,9 +83,7 @@ def create_index_schema():
     print("Index created.")
 
 def generate_response(context, user_query) -> str:
-    context_texts = []
-    for result in context:
-        context_texts.append(result["content"])
+    context_texts = [doc["content"] for doc in context]
 
     context_block = "\n\n---\n\n".join(context_texts)
     final_prompt = f"""
@@ -117,24 +107,24 @@ def generate_response(context, user_query) -> str:
         #temperature=0.2
     )
 
-    # Step 4: Extract assistant message
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
 
 def retrieve_context(query: str) -> tuple[str, str]:
+    
     query_embedding = generate_embeddings([query])
-    print("query embedding: ", query_embedding)
-    vector_query = VectorQuery(
+    
+    vector_query = VectorizedQuery(
         vector=query_embedding,
-        k=5,
-        fields="embedding"    # must match the name of index's vector field
+        k_nearest_neighbors=3,
+        fields="embedding"
     )
     results = search_client.search(
         vector_queries=[vector_query]
     )
-    return results
+    return list(results)
 
 
-def process_transcripts_from_blob(chunk_size: int=256) -> list[tuple[str, str]]:
+def process_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, str]]: # default = 556
     """
     Returns transcripts chunks from each blob in the Transcripts
     Resource group.
@@ -165,8 +155,6 @@ def generate_embeddings(texts: list[str]) -> list[float]:
         model= "text-embedding-3-large"
     )
     return response.data[0].embedding
-    print("length of response.data: ",len(response.data))
-    return [item.embedding for item in response.data]
         
 def process_and_store_chunks(chunks: list[(str, str)]):
     """
@@ -175,17 +163,21 @@ def process_and_store_chunks(chunks: list[(str, str)]):
     :param chunks: Description
     """
     # transcript_name can only contain letters, digits, _, -, =.
-    for transcript_name, chunk in chunks:
-        transcript_name = re.sub
-        chunk_blob_name = f"{transcript_name}-chunk-{chunks.index((transcript_name, chunk))}.txt"
+    documents = []
+    for i, (transcript_name, chunk) in enumerate(chunks):
+        chunk_blob_name = f"{transcript_name}-chunk-{i}"
+        chunk_blob_name = re.sub(r"[/,_.]", "-", chunk_blob_name)
+
         embedding = generate_embeddings([chunk]) # chunk will only be one string so no need to turn it into a list
-        upsert_data = [
-            {"id": chunk_blob_name,
+        upsert_data = {
+            "id": chunk_blob_name,
             "content": chunk,
             "embedding": embedding
-            }
-        ]
-        result = search_client.upload_documents(documents=upsert_data) # The document will be inserted if it is new and updated/replaced if it exists.
+        }
+    
+        
+        documents.append(upsert_data)
+    result = search_client.upload_documents(documents=documents) # The document will be inserted if it is new and updated/replaced if it exists.
     return result
 
 def main():
@@ -204,9 +196,7 @@ def main():
             context_results = retrieve_context(user_query)
             for result in context_results:
                 print(result["id"])
-                print(result["content"])
-                print()
-            
+                
             answer = generate_response(context_results, user_query)
             print(answer)
         elif cmd == 3:

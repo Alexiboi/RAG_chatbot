@@ -65,8 +65,16 @@ def format_transcript(transcript: list) -> str:
 
 
 
-def add_meta_data():
-    pass
+def add_meta_data(metadata: dict, blob_name: str):
+    blob_client = container_client.get_blob_client(blob_name)
+
+    metadata = {
+        "meetingDate": "2025-11-30",
+        "department": "Engineering",
+        "transcriptType": "SprintReview"
+    }
+
+    blob_client.set_blob_metadata(metadata)
 
 
 def read_in_transcript(url: str = EARNING_CALL_URL) -> pd.DataFrame:
