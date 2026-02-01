@@ -3,7 +3,7 @@ import os
 import pandas as pd 
 from dotenv import load_dotenv
 
-load_dotenv('confidential.env')
+load_dotenv('.env')
 
 BLOB_SAS_URL = os.getenv("BLOB_SAS_URL")
 container_name = "transcripts"

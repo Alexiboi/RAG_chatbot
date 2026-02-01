@@ -1,0 +1,31 @@
+# Environment variables / secrets
+.env
+.env.*
+confidential.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/
+
+# VS Code workspace files
+*.code-workspace
+
+# Local data (uploaded to Blob, not versioned)
+data/
+
+# Logs
+*.log
+
+# Test / coverage
+.coverage
+htmlcov/

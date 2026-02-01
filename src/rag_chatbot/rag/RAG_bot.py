@@ -10,13 +10,15 @@ from azure.search.documents.models import VectorizedQuery
 import re
 
 
-load_dotenv('confidential.env')
+load_dotenv('.env')
 
 BLOB_SAS_URL = os.getenv("BLOB_SAS_URL")
-container_client = ContainerClient.from_container_url(BLOB_SAS_URL)
-
+AZURE_OPENAI_API_KEY=os.getenv("AZURE_OPENAI_API_KEY")
 search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 admin_key = os.getenv("AZURE_SEARCH_KEY")
+
+container_client = ContainerClient.from_container_url(BLOB_SAS_URL)
+
 index_name = "transcript-chunks"
 
 # Index client manages the indexes that exist and allows new indexes to be added 
@@ -33,9 +35,10 @@ search_client = SearchClient(
     credential=AzureKeyCredential(admin_key)
 )
 
+
 deployment_name = "o4-mini"
 client = OpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_key=AZURE_OPENAI_API_KEY,
     base_url=f"https://transcript-embeds-openai.openai.azure.com/openai/v1"
 )
 
@@ -68,7 +71,6 @@ def create_index_schema():
                 type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
                 searchable=True,
                 vector_search_dimensions=vector_dimensions,
-                #vector_search_configuration="my-vector-config",
                 vector_search_profile_name="my-vector-config"
             )
         ],
@@ -87,8 +89,8 @@ def generate_response(context, user_query) -> str:
 
     context_block = "\n\n---\n\n".join(context_texts)
     final_prompt = f"""
-    You are an assistant that answers questions ONLY using the transcript context below.
-    If the answer is not in the context, say exactly: "The transcript does not contain that information."
+    You are an assistant that answers questions using the transcript context below.
+    If the answer is not in the context, say that the transcript does not contain the information.
 
     Context:
     {context_block}
@@ -101,7 +103,7 @@ def generate_response(context, user_query) -> str:
     response = client.chat.completions.create(
         model=deployment_name,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant that answers strictly based on the provided context."},
+            {"role": "system", "content": "You are a helpful assistant that answers based on the provided context."},
             {"role": "user", "content": final_prompt}
         ],
         #temperature=0.2
@@ -109,13 +111,22 @@ def generate_response(context, user_query) -> str:
 
     return response.choices[0].message.content
 
+
 def retrieve_context(query: str) -> tuple[str, str]:
+    """
+    As of now this returns context results using a cosine similarity from the query string embedding.
+    There could be better ways to do this.
     
+    :param query: Description
+    :type query: str
+    :return: Description
+    :rtype: tuple[str, str]
+    """
     query_embedding = generate_embeddings([query])
     
     vector_query = VectorizedQuery(
         vector=query_embedding,
-        k_nearest_neighbors=3,
+        k_nearest_neighbors=6,
         fields="embedding"
     )
     results = search_client.search(
@@ -146,9 +157,9 @@ def process_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, str]]:
 
 def generate_embeddings(texts: list[str]) -> list[float]: 
     client = OpenAI(
-        api_key = os.getenv("AZURE_OPENAI_API_KEY"),  
+        api_key = AZURE_OPENAI_API_KEY,
         base_url="https://transcript-embeds-openai.openai.azure.com/openai/v1/"
-    ) # https://transcript-embeds-openai.openai.azure.com/
+    ) 
 
     response = client.embeddings.create( 
         input = texts,
@@ -204,8 +215,12 @@ def main():
         else:
             print("Invalid command try again") 
 
-if __name__ == "__main__": 
-    #create_index_schema()
-    main()
+def generate_contextualized_response(user_query):
+    user_query = user_query.strip()
+    context_results = retrieve_context(user_query)
+    answer = generate_response(context_results, user_query)
+    return answer
+
+
 
 
