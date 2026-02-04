@@ -7,7 +7,9 @@ from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.models import VectorizedQuery
+from azure.core.exceptions import ResourceNotFoundError
 import re
+import hashlib
 
 
 load_dotenv('.env')
@@ -43,6 +45,15 @@ client = OpenAI(
 )
 
 vector_dimensions = 3072  # for text-embedding-3-large
+
+
+def delete_index_schema():
+    try:
+        index_client.delete_index(index_name)
+        print(f"Deleted index: {index_name}")
+    except ResourceNotFoundError:
+        print("Index did not exist, nothing to delete")
+
 
 def create_index_schema():
     """"
@@ -83,6 +94,7 @@ def create_index_schema():
 
     index_client.create_or_update_index(index_schema)
     print("Index created.")
+
 
 def generate_response(context, user_query) -> str:
     context_texts = [doc["content"] for doc in context]
@@ -135,15 +147,17 @@ def retrieve_context(query: str) -> tuple[str, str]:
     return list(results)
 
 
-def process_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, str]]: # default = 556
+def chunk_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, int, str]]: # default = 556
     """
     Returns transcripts chunks from each blob in the Transcripts
     Resource group.
 
-    :chunk_size: size in bytes for chunk
+    :chunk_size: size in characters for chunk
+    Larger chunk size means less chunks in total.
     """
     # blobs should be a list of every blob in the transcript container
-    blobs = container_client.list_blobs()
+    blobs = sorted(container_client.list_blobs(), key=lambda b:b.name)
+
     transcript_chunks = []
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size)
     for blob in blobs:
@@ -151,9 +165,13 @@ def process_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, str]]:
         download_stream = blob_client.download_blob()
         transcript_text = download_stream.readall().decode("utf-8")
         chunks = text_splitter.split_text(transcript_text)
-        transcript_chunks.extend((blob.name, chunk) for chunk in chunks) # appends onto list from an iterable
+
+        for j, chunk in enumerate(chunks):
+            transcript_chunks.append((blob.name, j, chunk))
+
+        #transcript_chunks.extend((blob.name, chunk) for chunk in chunks) # appends onto list from an iterable
     return transcript_chunks
-        
+
 
 def generate_embeddings(texts: list[str]) -> list[float]: 
     client = OpenAI(
@@ -167,7 +185,7 @@ def generate_embeddings(texts: list[str]) -> list[float]:
     )
     return response.data[0].embedding
         
-def process_and_store_chunks(chunks: list[(str, str)]):
+def process_and_store_chunks(chunks: list[(str, int, str)]):
     """
     Generate embeddings for chunks and store in vectorDB
     
@@ -175,13 +193,11 @@ def process_and_store_chunks(chunks: list[(str, str)]):
     """
     # transcript_name can only contain letters, digits, _, -, =.
     documents = []
-    for i, (transcript_name, chunk) in enumerate(chunks):
-        chunk_blob_name = f"{transcript_name}-chunk-{i}"
-        chunk_blob_name = re.sub(r"[/,_.]", "-", chunk_blob_name)
-
+    for transcript_name, j, chunk in chunks:
+        chunk_id = f"{make_chunk_id(transcript_name, chunk)}"
         embedding = generate_embeddings([chunk]) # chunk will only be one string so no need to turn it into a list
         upsert_data = {
-            "id": chunk_blob_name,
+            "id": chunk_id,
             "content": chunk,
             "embedding": embedding
         }
@@ -190,6 +206,11 @@ def process_and_store_chunks(chunks: list[(str, str)]):
         documents.append(upsert_data)
     result = search_client.upload_documents(documents=documents) # The document will be inserted if it is new and updated/replaced if it exists.
     return result
+
+def make_chunk_id(transcript_name: str, chunk: str) -> str:
+    h = hashlib.sha1((transcript_name + "\n" + chunk).encode("utf-8")).hexdigest()[:16]
+    base = re.sub(r"[/,_.]", "-", transcript_name)
+    return f"{base}-{h}"
 
 def main():
     print("Welcome to the RAG Chat application\n" \
@@ -200,7 +221,7 @@ def main():
     while True:
         cmd = int(input("Enter 1, 2 or 3: "))
         if cmd == 1:
-            chunks = process_transcripts_from_blob()
+            chunks = chunk_transcripts_from_blob()
             process_and_store_chunks(chunks)
         elif cmd == 2:
             user_query = input("Enter your user query").strip()
@@ -214,6 +235,8 @@ def main():
             return
         else:
             print("Invalid command try again") 
+
+main()
 
 def generate_contextualized_response(user_query):
     user_query = user_query.strip()
