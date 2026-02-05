@@ -4,7 +4,7 @@ from src.rag_chatbot.rag.retrieval_utils import retrieve_context
 from src.rag_chatbot.rag.env import deployment_name, client
 
 
-def generate_response(context, user_query) -> str:
+def generate_response(context: list[dict], user_query: str) -> str:
     context_texts = [doc["content"] for doc in context]
 
     context_block = "\n\n---\n\n".join(context_texts)
@@ -32,13 +32,15 @@ def generate_response(context, user_query) -> str:
     return response.choices[0].message.content
 
 
-@traceable
-def generate_contextualized_response(user_query):
+@traceable(name="rag_pipeline")
+def generate_contextualized_response(inputs: dict) -> dict:
+    user_query = inputs["question"]
+
     user_query = user_query.strip()
     context_results = retrieve_context(user_query)
     answer = generate_response(context_results, user_query)
-    return answer
-
-
-
-
+    return {
+        "answer": answer,
+        "prompt": user_query,
+        "retrieved": context_results
+    }

@@ -9,8 +9,6 @@ from gradio import Blocks, Row, Column, Image, Button, Markdown, Chatbot, Textbo
 from gradio.components import ChatMessage
 from uuid import uuid4
 from typing import List, Tuple
-#from RAG_bot import generate_response
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.rag_chatbot.rag.RAG_bot import generate_contextualized_response
 
 
@@ -23,7 +21,9 @@ content = load_params_from_txt("ui/res/content.txt")
 
 def generate_placeholder_reply(message: str) -> str:
     """Simple placeholder reply. Replace this with an LLM call."""
-    response = generate_contextualized_response(message)
+    query_dict = {"question": message}
+    response_dict = generate_contextualized_response(query_dict)
+    response = response_dict["answer"]
     return response
 
 
