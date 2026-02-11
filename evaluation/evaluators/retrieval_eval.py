@@ -34,6 +34,17 @@ def mrr(run, example, k=10):
             return {"key": "mrr", "score": 1.0 / i}
     return {"key": "mrr", "score": 0.0}
 
+@traceable(name="llm_judge_relevance_call")
+def _judge_call(instructions: str, msg: dict, ResponseModel):
+    return judge_client.beta.chat.completions.parse(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": str(msg)},
+        ],
+        response_format=ResponseModel,
+    )
+
 def LLM_judge_relevance(run, example=None):
     """
     Use an LLM to judge if the retrieved documents are relevant
@@ -43,6 +54,15 @@ def LLM_judge_relevance(run, example=None):
     :param gold: Description
     """
      # Prefer the original question if available; fallback to prompt
+    if example is not None:
+        answerable = (example.outputs or {}).get("answerable", True)
+        if not answerable:
+            return {
+                "key": "retrieval_relevance_binary",
+                "score": None,
+                "comment": "Skipped: example is marked answerable=false",
+            }
+
     question = None
     if hasattr(run, "inputs") and isinstance(run.inputs, dict):
         question = run.inputs.get("question")
@@ -87,11 +107,7 @@ def LLM_judge_relevance(run, example=None):
     }
 
     # Call the LLM to judge the output
-    response = judge_client.beta.chat.completions.parse(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": instructions}, {"role": "user", "content": str(msg)}],
-        response_format=Response
-    )
+    response = _judge_call(instructions, msg, Response)
 
     # Return the boolean score
     parsed = response.choices[0].message.parsed
@@ -101,7 +117,8 @@ def LLM_judge_relevance(run, example=None):
     comment = (
         f"rationale: {parsed.rationale}\n"
         f"confidence: {parsed.confidence}\n"
-        f"missing_info: {parsed.missing_info}"
+        f"missing_info: {parsed.missing_info}\n"
+        f""
     )
 
     return {
