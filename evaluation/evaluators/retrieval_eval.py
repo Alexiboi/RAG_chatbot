@@ -16,7 +16,29 @@ from pydantic import BaseModel, Field
 
 judge_client = OpenAI()
 
+def compact_docs(docs, max_docs=6, max_chars=600):
+        compact = []
+        for d in docs[:max_docs]:
+            if isinstance(d, dict):
+                doc_id = d.get("id", "")
+                text = d.get("content") or d.get("text") or ""
+                score = d.get("score")
+                text = text[:max_chars]
+                compact.append({"id": doc_id, "score": score, "text": text})
+            else:
+                # If docs are plain strings
+                compact.append(str(d)[:max_chars])
+        return compact
+
 def recall_at_k(run, example, k=6): 
+    """
+    recall returns the fraction of correct documents retrieved irrespective
+    of they're order in the retrieval.
+    
+    :param run: Description
+    :param example: Description
+    :param k: Description
+    """
     pred_ids = [d["id"] for d in run.outputs["retrieved"][:k]]
     gold_ids = example.outputs.get("gold_chunk_ids", [])
     if not gold_ids:
@@ -24,7 +46,22 @@ def recall_at_k(run, example, k=6):
     hit = len(set(pred_ids) & set(gold_ids))
     return {"key": f"recall@{k}", "score": hit / len(set(gold_ids))}
 
-def mrr(run, example, k=10):
+def mrr(run, example, k=6):
+    """
+    rank-based metric, returns a higher score if the 
+    gold standard document Id was retrieved higher in the ordering.
+    So 1.0 mrr indicates that the correct document was retrieved first,
+    if there was only 1 gold standard document.
+    
+    :param run: dictiornary which contains the inputs
+    (question) and outputs (retrieved docs & answer). 
+    Represents the output of the chatbot for a single example
+
+    :param example: Dictionary representing the inputs and
+    outputs for a gold standard example. (Gold standard answer, chunks)
+
+    :param k: number of documents retrieved
+    """
     pred_ids = [d["id"] for d in run.outputs["retrieved"][:k]]
     gold_ids = set(example.outputs.get("gold_chunk_ids", []))
     if not gold_ids:
@@ -34,16 +71,13 @@ def mrr(run, example, k=10):
             return {"key": "mrr", "score": 1.0 / i}
     return {"key": "mrr", "score": 0.0}
 
-@traceable(name="llm_judge_relevance_call")
-def _judge_call(instructions: str, msg: dict, ResponseModel):
-    return judge_client.beta.chat.completions.parse(
+def _judge_call(msg: str, ResponseModel):
+    response = judge_client.responses.parse(
         model="gpt-4o",
-        messages=[
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": str(msg)},
-        ],
-        response_format=ResponseModel,
+        input=msg,
+        text_format=ResponseModel,
     )
+    return response
 
 def LLM_judge_relevance(run, example=None):
     """
@@ -72,20 +106,6 @@ def LLM_judge_relevance(run, example=None):
     documents = run.outputs.get("retrieved") or []
 
     # Keep message readable: show IDs/snippets instead of dumping huge content
-    def compact_docs(docs, max_docs=6, max_chars=600):
-        compact = []
-        for d in docs[:max_docs]:
-            if isinstance(d, dict):
-                doc_id = d.get("id", "")
-                text = d.get("content") or d.get("text") or ""
-                score = d.get("score")
-                text = text[:max_chars]
-                compact.append({"id": doc_id, "score": score, "text": text})
-            else:
-                # If docs are plain strings
-                compact.append(str(d)[:max_chars])
-        return compact
-
     docs_for_judge = compact_docs(documents)
 
     class Response(BaseModel):
@@ -95,22 +115,68 @@ def LLM_judge_relevance(run, example=None):
         missing_info: str | None = Field(None, description="If not relevant, what evidence seems missing?")
         confidence: float = Field(..., ge=0, le=1, description="Confidence from 0 to 1.")
 
-    instructions="""
-    Given the question and retrieved documents, decide whether the retrieved documents are relevant.\n
-    Be strict: if the documents don't contain information that would help answer the question, mark False.\n
-    Return JSON exactly matching the schema.
-    """
+    instructions = """
+    You are an expert evaluator assessing whether retrieved documents are relevant to a given user query.
 
-    msg = {
-        "question": question,
-        "retrieved_documents": docs_for_judge
-    }
+    Your task is to determine whether the retrieved documents match the information need expressed in the query.
+
+    <Rubric>
+
+    Relevant retrieval:
+    - Documents directly relate to the subject of the query
+    - Documents contain information that could help answer the query
+    - Documents address the specific entities, concepts, or constraints in the query
+    - Documents are topically aligned with the query’s intent
+
+    Irrelevant retrieval:
+    - Documents discuss unrelated topics
+    - Documents only partially match surface keywords but miss the query’s intent
+    - Documents contain general background information without addressing the query
+    - Documents would not meaningfully help answer the query
+
+    </Rubric>
+
+    <Instructions>
+
+    For this evaluation:
+
+    - Carefully read the query to understand the information being requested
+    - Review the retrieved documents
+    - Determine whether the documents match the query’s topic and intent
+    - Assess whether the documents would help answer the query if used in generation
+    - Judge overall retrieval relevance
+
+    </Instructions>
+
+    <Reminder>
+
+    Focus on topical and semantic relevance to the query.
+    Do NOT judge answer correctness.
+    Do NOT evaluate writing quality.
+    Only assess whether the retrieved documents match the query’s information need.
+
+    </Reminder>
+
+    Now evaluate the following:
+
+    <Query>
+    {query}
+    </Query>
+
+    <RetrievedDocuments>
+    {documents}
+    </RetrievedDocuments>
+
+    Return your judgment in structured JSON format.
+    """.strip()
+
+    msg = instructions.format(query=question, documents=docs_for_judge)
 
     # Call the LLM to judge the output
-    response = _judge_call(instructions, msg, Response)
+    response = _judge_call(msg, Response)
 
     # Return the boolean score
-    parsed = response.choices[0].message.parsed
+    parsed = response.output_parsed
 
     score = 1.0 if parsed.documents_are_relevant else 0.0
 
