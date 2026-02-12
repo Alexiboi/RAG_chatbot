@@ -109,7 +109,7 @@ def LLM_judge_answer_relevance(run, example=None):
     }
 
 
-def LLM_judge_faithfulness(run, example=None):
+def LLM_judge_answer_faithfulness(run, example=None):
     """
     Use an LLM to judge if the contextualized response generated is faithfull
     to the retrieved context
@@ -122,7 +122,7 @@ def LLM_judge_faithfulness(run, example=None):
         answerable = (example.outputs or {}).get("answerable", True)
         if not answerable:
             return {
-                "key": "answer_relevance_binary",
+                "key": "answer_faithfulness_binary",
                 "score": None,
                 "comment": "Skipped: example is marked answerable=false",
             }
@@ -201,12 +201,12 @@ def LLM_judge_faithfulness(run, example=None):
     )
 
     return {
-        "key": "answer_faithfullness_binary",
+        "key": "answer_faithfulness_binary",
         "score": score,
         "comment": comment,
         # Optional: attach extra structured info (can help debugging)
         "extra": {
-            "answer_is_relevant": parsed.answer_is_faithful,
+            "answer_is_faithful": parsed.answer_is_faithful,
             "confidence": parsed.confidence,
         }
     }
@@ -226,7 +226,7 @@ def LLM_judge_answer_correctness(run, example=None):
         answerable = (example.outputs or {}).get("answerable", True)
         if not answerable:
             return {
-                "key": "answer_relevance_binary",
+                "key": "answer_correctness_binary",
                 "score": None,
                 "comment": "Skipped: example is marked answerable=false",
             }
@@ -242,7 +242,7 @@ def LLM_judge_answer_correctness(run, example=None):
     answer = run.outputs.get("answer")
 
     # sample response:
-    sample_response = example.outputs.get("answer")
+    sample_response = example.outputs.get("reference_answer")
 
     class Response(BaseModel):
         answer_is_correct: bool = Field(..., description="True if the response is correct compared to the sample response")
@@ -331,7 +331,7 @@ def LLM_judge_answer_correctness(run, example=None):
         "comment": comment,
         # Optional: attach extra structured info (can help debugging)
         "extra": {
-            "answer_is_relevant": parsed.answer_is_correct,
+            "answer_is_correct": parsed.answer_is_correct,
             "confidence": parsed.confidence,
         }
     }
