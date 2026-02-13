@@ -1,4 +1,9 @@
 
+from src.rag_chatbot.rag.blob_utils import chunk_transcripts_from_blob
+from src.rag_chatbot.rag.embedding_utils import process_and_store_chunks
+from src.rag_chatbot.rag.RAG_bot import generate_response
+from src.rag_chatbot.rag.retrieval_utils import retrieve_context
+
 def main():
     print("Welcome to the RAG Chat application\n" \
     "Commands:\n" \

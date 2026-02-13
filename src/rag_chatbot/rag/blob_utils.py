@@ -1,5 +1,5 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from src.rag_chatbot.rag.index_utils import container_client
+from src.rag_chatbot.rag.env import container_client
 
 def chunk_transcripts_from_blob(chunk_size: int=756) -> list[tuple[str, int, str]]: # default = 556
     """

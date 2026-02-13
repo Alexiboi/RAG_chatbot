@@ -21,6 +21,9 @@ def retrieve_context(query: str) -> tuple[str, str]:
         fields="embedding"
     )
     results = search_client.search(
-        vector_queries=[vector_query]
+        search_text=query,
+        vector_queries=[vector_query],
+        top=6
     )
     return list(results)
+
