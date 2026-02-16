@@ -242,24 +242,25 @@ class LLMJudge:
     def get_sample_response(self):
         return self.example.outputs.get("reference_answer")
     
-    def check_answerable(self):
+    def check_answerable(self, target: str):
         if self.example is not None:
             answerable = (self.example.outputs or {}).get("answerable", True)
             if not answerable:
                 return {
-                    "key": "retrieval_relevance_binary",
+                    "key": target,
                     "score": None,
                     "comment": "Skipped: example is marked answerable=false",
                 }
+            
 
-    def judge(self, run, example=None):
+    def judge(self):
         # Your LLM_judge_relevance logic here, using self.client
         pass
 
 
 class RetrievalRelevanceJudge(LLMJudge):
-     def judge(self, run, example=None):
-        self.check_answerable()
+     def judge(self):
+        self.check_answerable("retrieval_relevance_binary")
 
         question = self.get_query()
 
@@ -289,8 +290,8 @@ class RetrievalRelevanceJudge(LLMJudge):
         }
      
 class AnswerRelevanceJudge(LLMJudge):
-     def judge(self, run, example=None):
-        self.check_answerable()
+     def judge(self):
+        self.check_answerable("answer_relevance_binary")
         question = self.get_query()
 
         # Keep message readable: show IDs/snippets instead of dumping huge content
@@ -305,7 +306,7 @@ class AnswerRelevanceJudge(LLMJudge):
         score = 1.0 if response.output else 0.0
 
         return {
-            "key": "retrieval_relevance_binary",
+            "key": "answer_relevance_binary",
             "score": score,
             "comment": (
                 f"rationale: {response.rationale}\n"
@@ -315,7 +316,7 @@ class AnswerRelevanceJudge(LLMJudge):
      
 class AnswerFaithfulnessJudge(LLMJudge):
      def judge(self):
-        self.check_answerable()
+        self.check_answerable("answer_faithfulness_binary")
         question = self.get_query()
 
         # Keep message readable: show IDs/snippets instead of dumping huge content
@@ -332,7 +333,7 @@ class AnswerFaithfulnessJudge(LLMJudge):
         score = 1.0 if response.output else 0.0
 
         return {
-            "key": "retrieval_relevance_binary",
+            "key": "answer_faithfulness_binary",
             "score": score,
             "comment": (
                 f"rationale: {response.rationale}\n"
@@ -342,7 +343,7 @@ class AnswerFaithfulnessJudge(LLMJudge):
      
 class AnswerCorrectnessJudge(LLMJudge):
      def judge(self):
-        self.check_answerable()
+        self.check_answerable("answer_correctness_binary")
         question = self.get_query()
         # Keep message readable: show IDs/snippets instead of dumping huge content
         answer = self.get_answer()
@@ -358,7 +359,7 @@ class AnswerCorrectnessJudge(LLMJudge):
         score = 1.0 if response.output else 0.0
 
         return {
-            "key": "retrieval_relevance_binary",
+            "key": "answer_correctness_binary",
             "score": score,
             "comment": (
                 f"rationale: {response.rationale}\n"

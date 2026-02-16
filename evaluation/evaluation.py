@@ -27,4 +27,4 @@ def run_experiment(key="2024Q4_Agilent"):
 
     print(results)
 
-run_experiment("2024Q1_Amazon")
+run_experiment("2024Q3_Blackstone")
