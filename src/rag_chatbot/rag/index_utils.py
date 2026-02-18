@@ -56,7 +56,43 @@ def create_index_schema():
                 searchable=True,
                 vector_search_dimensions=vector_dimensions,
                 vector_search_profile_name="my-vector-config"
-            )
+            ),
+            # Metadata (filtering + faceting)
+            SimpleField(
+                name="docType",
+                type=SearchFieldDataType.String,
+                filterable=True,
+                facetable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="company",
+                type=SearchFieldDataType.String,
+                filterable=True,
+                facetable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="year",
+                type=SearchFieldDataType.Int32,
+                filterable=True,
+                facetable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="quarter",
+                type=SearchFieldDataType.Int32,
+                filterable=True,
+                facetable=True,
+                sortable=True,
+            ),
+            SimpleField(
+                name="reportDate",
+                type=SearchFieldDataType.DateTimeOffset,
+                filterable=True,
+                facetable=True,
+                sortable=True,
+            ),
         ],
         vector_search= VectorSearch(
             profiles=[VectorSearchProfile(name="my-vector-config", algorithm_configuration_name="my-algorithms-config")],
@@ -67,3 +103,6 @@ def create_index_schema():
 
     index_client.create_or_update_index(index_schema)
     print("Index created.")
+
+if __name__ == "__main__":
+    create_index_schema()

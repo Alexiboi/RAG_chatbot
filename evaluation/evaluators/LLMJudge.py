@@ -1,4 +1,7 @@
 from pydantic import BaseModel, Field
+from src.rag_chatbot.rag.env import client, deployment_name
+import os
+from openai import OpenAI
 
 
 class LLMJudge:
@@ -196,8 +199,7 @@ class LLMJudge:
     }
 
     def __init__(self, run, example):
-        from openai import OpenAI
-        self.client = OpenAI()
+        self.client = client
         self.run = run
         self.example = example
 
@@ -217,7 +219,7 @@ class LLMJudge:
 
     def returnResponse(self, msg: str, ResponseModel):
         response = self.client.responses.parse(
-            model="gpt-4o",
+            model=deployment_name,
             input=msg,
             text_format=ResponseModel,
         )

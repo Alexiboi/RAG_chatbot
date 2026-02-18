@@ -11,8 +11,10 @@ from .LLMJudge import RetrievalRelevanceJudge
 # Both Recall@K and MRR will be used for empirical measure of retrieved
 # document accuracy
 # LLM as a judge will be used as a Relevance measure.
+K=6
 
-def recall_at_k(run, example, k=6): 
+
+def recall_at_k(run, example, k=K): 
     """
     recall returns the fraction of correct documents retrieved irrespective
     of they're order in the retrieval.
@@ -28,7 +30,7 @@ def recall_at_k(run, example, k=6):
     hit = len(set(pred_ids) & set(gold_ids))
     return {"key": f"recall@{k}", "score": hit / len(set(gold_ids))}
 
-def mrr(run, example, k=6):
+def mrr(run, example, k=K):
     """
     Compute Mean Reciprocal Rank (MRR) at k.
 
@@ -56,7 +58,7 @@ def mrr(run, example, k=6):
             return {"key": "mrr", "score": 1.0 / i}
     return {"key": "mrr", "score": 0.0}
 
-def map_at_k(run, example, k=6):
+def map_at_k(run, example, k=K):
     """
     Compute Average Precision (AP) at k for a single query/run.
     (In a dataset, MAP@k is the mean of these AP@k scores.)
