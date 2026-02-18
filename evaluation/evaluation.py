@@ -16,27 +16,21 @@ rag_app = generate_contextualized_response
 evaluators = [LLM_judge_relevance, LLM_judge_answer_relevance, LLM_judge_answer_correctness, LLM_judge_answer_faithfulness, mrr, map_at_k, recall_at_k]
 
 
-def run_experiment(key="2024Q4_Agilent"):
+def run_experiment(key: str, experiment_name = ""):
     examples = list(ls_client.list_examples(dataset_id=dataset_ids[key]))
+    experiment_prefix = (key + "_" + experiment_name).strip()
     results = evaluate(
         rag_app,              # Your application function
         data=examples,           # Dataset to evaluate on
         evaluators=evaluators,  # List of evaluator functions
-        experiment_prefix=key
+        experiment_prefix=experiment_prefix,
     )
 
     print(results)
 
-def run_all_experiments():
+def run_all_experiments(experiment_name=""):
     for id in dataset_ids.keys():
-        examples = list(ls_client.list_examples(dataset_id=dataset_ids[id]))
-        results = evaluate(
-            rag_app,              # Your application function
-            data=examples,           # Dataset to evaluate on
-            evaluators=evaluators,  # List of evaluator functions
-            experiment_prefix=id
-        )
-        print(results)
+        run_experiment(key=id, experiment_name=experiment_name)
 
 if __name__ == '__main__':
-    run_all_experiments()
+    run_all_experiments(experiment_name="without_rerank")
