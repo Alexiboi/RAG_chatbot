@@ -33,4 +33,4 @@ def run_all_experiments(experiment_name=""):
         run_experiment(key=id, experiment_name=experiment_name)
 
 if __name__ == '__main__':
-    run_all_experiments(experiment_name="without_rerank")
+    run_experiment("2024Q2_Agilent", "gpt5")

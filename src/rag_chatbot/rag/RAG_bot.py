@@ -1,5 +1,4 @@
 
-from langsmith import traceable
 from src.rag_chatbot.rag.retrieval_utils import retrieve_context
 from src.rag_chatbot.rag.env import deployment_name, client
 
@@ -32,7 +31,7 @@ def generate_response(context: list[dict], user_query: str) -> str:
     return response.choices[0].message.content
 
 
-@traceable(name="rag_pipeline")
+
 def generate_contextualized_response(inputs: dict) -> dict:
     user_query = inputs["question"]
 

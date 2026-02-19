@@ -1,5 +1,5 @@
 
-from src.rag_chatbot.rag.env import client
+from src.rag_chatbot.rag.env import EMBEDDING_CLIENT
 from src.rag_chatbot.rag.index_utils import search_client
 import hashlib
 import re
@@ -14,7 +14,7 @@ COMPANY_MAP = {
 
 def generate_embeddings(texts: list[str]) -> list[float]: 
 
-    response = client.embeddings.create( 
+    response = EMBEDDING_CLIENT.embeddings.create( 
         input = texts,
         model= "text-embedding-3-large"
     )
