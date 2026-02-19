@@ -2,12 +2,17 @@ from src.rag_chatbot.rag.embedding_utils import generate_embeddings
 from src.rag_chatbot.rag.index_utils import search_client
 from azure.search.documents.models import VectorizedQuery
 from sentence_transformers import CrossEncoder
-
-
-
-
+import textwrap
+import langextract as lx
+from src.rag_chatbot.rag.env import deployment_name, client
 from sentence_transformers import CrossEncoder
+import os
+from langextract import factory
+import langextract_azureopenai
+
 model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
+
+
 
 K=30
 FINAL_K = 6
@@ -102,9 +107,79 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     return candidates
 
 
+    
+
+def return_filter(query: str) -> str:
+    """
+    Extracts metadata fields and creates filter for azure ai search in order to narrow down retrieved documents
+    
+    :param query: Description
+    :type query: str
+    :return: Description
+    :rtype: str
+    """
+    prompt = textwrap.dedent("""\
+    Extract document type (which can be one from earnings_call, policy_document or case_study), company, year, quarter and relationships in order of appearance.
+    Use exact text for extractions. Do not paraphrase or overlap entities.
+    Provide meaningful attributes for each entity to add context.""")
+    examples = [
+        lx.data.ExampleData(
+            text=(
+                """
+            During the Agilent Technologies Q2 2024 Earnings Call,
+            which executives were present for prepared remarks and which 
+            leaders were joining specifically for the Q&A portion?"""
+            ),
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="document type",
+                    extraction_text="Earnings Call",
+                    attributes={"document_type": "earnings_call"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="company",
+                    extraction_text="Agilent Technologies",
+                    attributes={"company": "Agilent"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="quarter",
+                    extraction_text="Q2",
+                    attributes={"quarter": "2"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="year",
+                    extraction_text="2024",
+                    attributes={"year": "2024"},
+                ),
+            ],
+        )
+        
+    ]
+    config = lx.factory.ModelConfig(
+        model_id=deployment_name,  # <-- your Azure *deployment name*
+        provider="AzureOpenAILanguageModel",
+        provider_kwargs={
+            "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+            "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+            "api_version": os.getenv("AZURE_OPENAI_API_VERSION"),
+        },
+    )
+    # langextract uses the openAI api key not azure since langextract is incompatible with azure (for now)
+    result = lx.extract(
+        text_or_documents=query,
+        prompt_description=prompt,
+        examples=examples,
+        model_id="gpt-4o-mini"
+        
+    )
+    print(result)
+
 
 if __name__ == "__main__":
-    retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
+    #retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
+    return_filter("""In the Apple Q3 2022 earnings call,
+            which executives were present for prepared remarks and which 
+            leaders were joining specifically for the Q&A portion?""")
    
 
 
