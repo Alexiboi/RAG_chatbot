@@ -6,7 +6,8 @@ from openai import AzureOpenAI, OpenAI
 
 load_dotenv('.env')
 
-BLOB_SAS_URL = os.getenv("BLOB_SAS_URL")
+TRANSCRIPT_SAS_URL = str(os.getenv("TRANSCRIPT_SAS_URL"))
+MEETING_NOTE_SAS_URL = str(os.getenv("MEETING_NOTE_SAS_URL"))
 AZURE_OPENAI_API_KEY=os.getenv("AZURE_OPENAI_API_KEY")
 search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 admin_key = os.getenv("AZURE_SEARCH_KEY")
@@ -15,9 +16,10 @@ azure_client_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
 AZURE_OPENAI_EMBEDDING_KEY = os.getenv("AZURE_OPENAI_API_EMBEDDING_KEY")
 
-container_client = ContainerClient.from_container_url(BLOB_SAS_URL)
+transcript_container_client = ContainerClient.from_container_url(TRANSCRIPT_SAS_URL)
+notes_container_client = ContainerClient.from_container_url(MEETING_NOTE_SAS_URL)
 
-index_name = "transcript-chunks"
+# index_name = "transcript-chunks"
 deployment_name = "gpt-5.2-chat"
 vector_dimensions = 3072  # for text-embedding-3-large
 

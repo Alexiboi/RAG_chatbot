@@ -1,6 +1,6 @@
 from datetime import datetime
 from src.rag_chatbot.rag.embedding_utils import generate_embeddings
-from src.rag_chatbot.rag.index_utils import search_client
+#from src.rag_chatbot.rag.index_utils import search_client
 from azure.search.documents.models import VectorizedQuery
 from sentence_transformers import CrossEncoder
 import textwrap

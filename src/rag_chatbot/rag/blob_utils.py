@@ -1,10 +1,9 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from src.rag_chatbot.rag.env import container_client
 
 def chunk_transcripts_from_blob(
         container_client,
         doc_type: str,
-        chunk_size: int=756) -> list[tuple[str, int, str]]: # default = 556
+        chunk_size: int=756) -> list[dict]: # default = 556
     """
     Returns transcripts chunks from each blob in the Transcripts
     Resource group.
@@ -21,6 +20,9 @@ def chunk_transcripts_from_blob(
     transcript_chunks = []
 
     for blob in blobs:
+        # include check to see if the uploaded file is a txt file
+        if not blob.name.lower().endswith(".txt"):
+            continue
         blob_client = container_client.get_blob_client(blob)
         download_stream = blob_client.download_blob()
         transcript_text = download_stream.readall().decode("utf-8")
