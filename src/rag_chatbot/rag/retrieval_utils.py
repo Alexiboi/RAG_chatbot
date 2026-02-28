@@ -1,3 +1,4 @@
+from datetime import datetime
 from src.rag_chatbot.rag.embedding_utils import generate_embeddings
 from src.rag_chatbot.rag.index_utils import search_client
 from azure.search.documents.models import VectorizedQuery
@@ -90,6 +91,8 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     :rtype: tuple[str, str]
     """
     query_embedding = generate_embeddings([query])
+
+    filter_text = retrieve_filter(query)
     
     vector_query = VectorizedQuery(
         vector=query_embedding,
@@ -99,6 +102,7 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     results = search_client.search(
         search_text=query,
         vector_queries=[vector_query],
+        filter = filter_text,
         top=FINAL_K
     )
 
@@ -106,10 +110,15 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     
     return candidates
 
+def retrieve_filter(query: str) -> str:
+    result = return_metadata(query)
+    metadata = langextract_to_metadata(result)
+    filter = build_filter(metadata)
+    return filter
 
     
 
-def return_filter(query: str) -> str:
+def return_metadata(query: str) -> str:
     """
     Extracts metadata fields and creates filter for azure ai search in order to narrow down retrieved documents
     
@@ -119,7 +128,7 @@ def return_filter(query: str) -> str:
     :rtype: str
     """
     prompt = textwrap.dedent("""\
-    Extract document type (which can be one from earnings_call, policy_document or case_study), company, year, quarter and relationships in order of appearance.
+    Extract document type (which can be one from earnings_call, policy_document, ticket or case_study), company, year, quarter and relationships in order of appearance.
     Use exact text for extractions. Do not paraphrase or overlap entities.
     Provide meaningful attributes for each entity to add context.""")
     examples = [
@@ -155,31 +164,80 @@ def return_filter(query: str) -> str:
         )
         
     ]
-    config = lx.factory.ModelConfig(
-        model_id=deployment_name,  # <-- your Azure *deployment name*
-        provider="AzureOpenAILanguageModel",
-        provider_kwargs={
-            "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
-            "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
-            "api_version": os.getenv("AZURE_OPENAI_API_VERSION"),
-        },
-    )
     # langextract uses the openAI api key not azure since langextract is incompatible with azure (for now)
     result = lx.extract(
         text_or_documents=query,
         prompt_description=prompt,
         examples=examples,
-        model_id="gpt-4o-mini"
-        
+        model_id="gpt-4o-mini",
     )
-    print(result)
+    return result
 
+
+def langextract_to_metadata(annotated_doc):
+    """
+    Convert LangExtract AnnotatedDocument into structured metadata dict.
+    """
+
+    metadata = {
+        "docType": None,
+        "company": None,
+        "year": None,
+        "quarter": None,
+        "reportDate": None
+    }
+
+    for extraction in annotated_doc.extractions:
+        attrs = extraction.attributes or {}
+
+        # document type
+        if "document_type" in attrs:
+            metadata["docType"] = attrs["document_type"]
+
+        # company
+        if "company" in attrs:
+            metadata["company"] = attrs["company"]
+
+        # year
+        if "year" in attrs:
+            try:
+                metadata["year"] = int(attrs["year"])
+            except:
+                pass
+
+        # quarter
+        if "quarter" in attrs:
+            try:
+                metadata["quarter"] = int(attrs["quarter"])
+            except:
+                pass
+
+    # Derive reportDate deterministically
+    if metadata["year"] and metadata["quarter"]:
+        month = metadata["quarter"] * 3
+        metadata["reportDate"] = datetime(
+            metadata["year"], month, 1
+        ).isoformat() + "Z"
+
+    return metadata
+
+def build_filter(meta):
+    parts = []
+
+    if meta["docType"]:
+        parts.append(f"docType eq '{meta['docType']}'")
+    if meta["company"]:
+        parts.append(f"company eq '{meta['company']}'")
+    if meta["year"]:
+        parts.append(f"year eq {meta['year']}")
+    if meta["quarter"]:
+        parts.append(f"quarter eq {meta['quarter']}")
+
+    return " and ".join(parts)
 
 if __name__ == "__main__":
-    #retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
-    return_filter("""In the Apple Q3 2022 earnings call,
-            which executives were present for prepared remarks and which 
-            leaders were joining specifically for the Q&A portion?""")
+    retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
+    
    
 
 
