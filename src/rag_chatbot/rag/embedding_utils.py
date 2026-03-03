@@ -22,7 +22,7 @@ def generate_embeddings(texts: list[str]) -> list[float]:
         model= "text-embedding-3-large"
     )
     return [item.embedding for item in response.data]
-    return response.data[0].embedding
+    #return response.data[0].embedding
         
 def process_and_store_chunks(chunks: list[dict[str, Any]]):
     """

@@ -1,6 +1,6 @@
 from datetime import datetime
 from src.rag_chatbot.rag.embedding_utils import generate_embeddings
-#from src.rag_chatbot.rag.index_utils import search_client
+from src.rag_chatbot.rag.index_utils import TRANSCRIPT_SEARCH_CLIENT, MEETING_NOTES_SEARCH_CLIENT
 from azure.search.documents.models import VectorizedQuery
 from sentence_transformers import CrossEncoder
 import textwrap
@@ -90,7 +90,7 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     :return: Description
     :rtype: tuple[str, str]
     """
-    query_embedding = generate_embeddings([query])
+    query_embedding = generate_embeddings([query])[0]
 
     filter_text = retrieve_filter(query)
     
@@ -99,16 +99,48 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
         k_nearest_neighbors=k,
         fields="embedding"
     )
-    results = search_client.search(
+
+    transcript_results = TRANSCRIPT_SEARCH_CLIENT.search(
         search_text=query,
         vector_queries=[vector_query],
         filter = filter_text,
         top=FINAL_K
     )
 
-    candidates = list(results)
-    
-    return candidates
+    meeting_results = MEETING_NOTES_SEARCH_CLIENT.search(
+        search_text=query,
+        vector_queries=[vector_query],
+        filter = filter_text,
+        top=FINAL_K
+    )
+
+    # Convert to list and attach source label
+    combined = []
+
+    for r in list(transcript_results):
+        r_dict = dict(r)
+        r_dict["_index"] = "transcripts"
+        r_dict["_score"] = r.get("@search.score", 0)
+        combined.append(r_dict)
+
+    for r in list(meeting_results):
+        r_dict = dict(r)
+        r_dict["_index"] = "meeting_notes"
+        r_dict["_score"] = r.get("@search.score", 0)
+        combined.append(r_dict)
+
+    # Sort across both indexes by score
+    combined_sorted = sorted(
+        combined,
+        key=lambda x: x["_score"],
+        reverse=True
+    )
+
+    # Return final top k
+    return combined_sorted[:k]
+
+def combine_results():
+    pass
 
 def retrieve_filter(query: str) -> str:
     result = return_metadata(query)

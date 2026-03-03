@@ -161,4 +161,11 @@ def create_meeting_notes_index_schema(index_name: str=MEETING_NOTES_INDEX) -> Se
 
 
 if __name__ == "__main__":
-    delete_index_schema()
+    #create_or_update_indexes()
+    # choice = int(input("1 for deletion of transcript embeddings 2 for deletion of meeting note embeddings."))
+    # while choice != 1 or choice != 2:
+    #     if choice == 1:
+    #         delete_index_schema(TRANSCRIPT_INDEX)
+    #     elif choice == 2:
+    #         delete_index_schema(MEETING_NOTES_INDEX)
+    pass
