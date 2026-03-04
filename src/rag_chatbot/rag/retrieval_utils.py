@@ -80,9 +80,9 @@ def rerank(query, candidates, final_top_k: int = FINAL_K):
 
     return reranked_candidates
 
-def retrieve_context(query: str, k: int = K) -> list[dict]:
+def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
     """
-    As of now this returns context results using a cosine similarity from the query string embedding.
+    As of now this returns context results using a cosine similarity + BM25 from the query string embedding & content.
     There could be better ways to do this.
     
     :param query: Description
@@ -100,30 +100,36 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
         fields="embedding"
     )
 
+    print(f"filter text: {filter_text}")
+    
+    
+    transcript_filter = safe_filter_for_index(filter_text, "transcripts")
+    meeting_filter = safe_filter_for_index(filter_text, "meeting_notes")
+
     transcript_results = TRANSCRIPT_SEARCH_CLIENT.search(
-        search_text=query,
+        #search_text=query,
         vector_queries=[vector_query],
-        filter = filter_text,
-        top=FINAL_K
+        filter = transcript_filter,
+        top=k
     )
 
     meeting_results = MEETING_NOTES_SEARCH_CLIENT.search(
-        search_text=query,
+        #search_text=query,
         vector_queries=[vector_query],
-        filter = filter_text,
-        top=FINAL_K
+        filter = meeting_filter,
+        top=k
     )
 
     # Convert to list and attach source label
     combined = []
 
-    for r in list(transcript_results):
+    for r in transcript_results:
         r_dict = dict(r)
         r_dict["_index"] = "transcripts"
         r_dict["_score"] = r.get("@search.score", 0)
         combined.append(r_dict)
 
-    for r in list(meeting_results):
+    for r in meeting_results:
         r_dict = dict(r)
         r_dict["_index"] = "meeting_notes"
         r_dict["_score"] = r.get("@search.score", 0)
@@ -137,10 +143,34 @@ def retrieve_context(query: str, k: int = K) -> list[dict]:
     )
 
     # Return final top k
+    print(combined_sorted[:k])
     return combined_sorted[:k]
 
-def combine_results():
-    pass
+def safe_filter_for_index(filter_text: str, index_kind: str) -> str | None:
+    """
+    index_kind: "transcripts" or "meeting_notes"
+    """
+    if not filter_text:
+        return None
+
+    if index_kind == "transcripts":
+        # transcripts support: docType, company, quarter, year (example)
+        # If the filter is clearly meeting_note-specific, skip it for transcripts.
+        if "author" in filter_text or "meetingDate" in filter_text:
+            #return "docType eq 'earnings_call'"  # or None to not filter at all
+            return None
+        return filter_text
+
+    if index_kind == "meeting_notes":
+        # meeting_notes support: docType, author, meetingDate
+        # If the filter is earnings_call-specific, skip it for meeting notes.
+        if "company" in filter_text or "quarter" in filter_text or "year" in filter_text:
+            #return "docType eq 'meeting_note'"  # or None
+            return None
+        return filter_text
+
+    return None
+
 
 def retrieve_filter(query: str) -> str:
     result = return_metadata(query)
@@ -160,9 +190,38 @@ def return_metadata(query: str) -> str:
     :rtype: str
     """
     prompt = textwrap.dedent("""\
-    Extract document type (which can be one from earnings_call, policy_document, ticket or case_study), company, year, quarter and relationships in order of appearance.
-    Use exact text for extractions. Do not paraphrase or overlap entities.
-    Provide meaningful attributes for each entity to add context.""")
+    You are an information extraction system for building Azure AI Search filters.
+
+    TASK
+    1) First, determine the document type and extract it as:
+    - document_type = "earnings_call" OR "meeting_note"
+    Choose exactly one. If unclear, pick the most likely based on the text.
+
+    2) Then extract ONLY the fields required for that document_type:
+
+    EARNINGS CALL (document_type="earnings_call")
+    - company: the company name mentioned (exact text span)
+    - quarter: the quarter if present (e.g., "Q1", "Q2", "Q3", "Q4")
+    - year: the 4-digit year if present (e.g., "2024")
+
+    MEETING NOTE (document_type="meeting_note")
+    - author: the person who wrote the notes (exact text span)
+    - meetingDate: the meeting date if present (exact text span as written if in YYYY/MM/DD form otherwise convert the date to this form. For example 28th January 2026 should be converted to 2026/01/28)
+
+    EXTRACTION RULES
+    - Use exact text from the input for extraction_text (no paraphrasing).
+    - Do not invent values. If a field is not explicitly present, omit it.
+    - Do not output fields that are not listed for the chosen document_type.
+    - Do not overlap entities (each extracted span should be distinct).
+    - Prefer the earliest mention in the text when multiple candidates exist.
+    - Add a single meaningful normalized attribute for each extraction:
+    * document type -> {"document_type": "..."}
+    * company -> {"company": "<normalized short company name if obvious, else exact>"}
+    * quarter -> {"quarter": "1|2|3|4"} (convert Q1->1 etc.)
+    * year -> {"year": "YYYY"}
+    * author -> {"author": "<exact or normalized if obvious>"}
+    * meetingDate -> {"meetingDate": "<as written>"}\
+    """)
     examples = [
         lx.data.ExampleData(
             text=(
@@ -193,8 +252,33 @@ def return_metadata(query: str) -> str:
                     attributes={"year": "2024"},
                 ),
             ],
-        )
-        
+        ),
+        lx.data.ExampleData(
+            text=(
+                """
+                From Reuben's meeting notes on the 28th January 2026 (28/01/2026),
+                the team discussed upcoming product milestones, internal tooling improvements,
+                and priorities for the next development sprint.
+                """
+            ),
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="document type",
+                    extraction_text="meeting notes",
+                    attributes={"document_type": "meeting_note"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="author",
+                    extraction_text="Reuben",
+                    attributes={"author": "Reuben"},
+                ),
+                lx.data.Extraction(
+                    extraction_class="meetingDate",
+                    extraction_text="28th January 2026 (28/01/2026)",
+                    attributes={"meetingDate": "28/01/2026"},
+                ),
+            ],
+        ),
     ]
     # langextract uses the openAI api key not azure since langextract is incompatible with azure (for now)
     result = lx.extract(
@@ -212,11 +296,16 @@ def langextract_to_metadata(annotated_doc):
     """
 
     metadata = {
+        # earning call metadata
         "docType": None,
         "company": None,
         "year": None,
         "quarter": None,
-        "reportDate": None
+        "reportDate": None,
+        # Meeting notes metadata
+        "meetingDate": None,
+        "author": None
+
     }
 
     for extraction in annotated_doc.extractions:
@@ -243,6 +332,22 @@ def langextract_to_metadata(annotated_doc):
                 metadata["quarter"] = int(attrs["quarter"])
             except:
                 pass
+        
+        if "author" in attrs:
+            try:
+                metadata["author"] = attrs["author"]
+            except:
+                pass
+
+        if "meetingDate" in attrs:
+            try:
+                print(attrs["meetingDate"])
+                metadata["meetingDate"] = datetime.strptime(
+                    attrs["meetingDate"], "%Y/%m/%d"
+                ).isoformat() + "Z"
+            except Exception as e:
+                raise(e)
+                
 
     # Derive reportDate deterministically
     if metadata["year"] and metadata["quarter"]:
@@ -250,6 +355,8 @@ def langextract_to_metadata(annotated_doc):
         metadata["reportDate"] = datetime(
             metadata["year"], month, 1
         ).isoformat() + "Z"
+
+
 
     return metadata
 
@@ -263,12 +370,20 @@ def build_filter(meta):
     if meta["year"]:
         parts.append(f"year eq {meta['year']}")
     if meta["quarter"]:
-        parts.append(f"quarter eq {meta['quarter']}")
+        parts.append(f"quarter eq '{meta['quarter']}'")
+    if meta["author"]:
+        parts.append(f"author eq '{meta['author']}'")
+    if meta["meetingDate"]:
+        parts.append(f"meetingDate eq {meta['meetingDate']}")
 
     return " and ".join(parts)
 
 if __name__ == "__main__":
-    retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
+    print(retrieve_context("""
+From Reuben's meeting notes on the 28th January 2026 (28/01/2026),
+                the team discussed upcoming product milestones, internal tooling improvements,
+                and priorities for the next development sprint."""))
+    #retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
     
    
 
