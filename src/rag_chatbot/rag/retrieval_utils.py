@@ -19,7 +19,6 @@ K=30
 FINAL_K = 6
 
 
-
 def rerank(query, candidates, final_top_k: int = FINAL_K):
     texts = []
     idx_map = []  # maps rank-list index -> candidate index
