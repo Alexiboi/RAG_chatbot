@@ -1,23 +1,28 @@
 from datetime import datetime
+from typing import Literal
+from pydantic import BaseModel, Field
 from src.rag_chatbot.rag.embedding_utils import generate_embeddings
+from src.rag_chatbot.rag.env import client, deployment_name
 from src.rag_chatbot.rag.index_utils import TRANSCRIPT_SEARCH_CLIENT, MEETING_NOTES_SEARCH_CLIENT
 from azure.search.documents.models import VectorizedQuery
 from sentence_transformers import CrossEncoder
 import textwrap
 import langextract as lx
-from src.rag_chatbot.rag.env import deployment_name, client
-import os
-from langextract import factory
-
-model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
-
-
 
 K=30
 FINAL_K = 6
 
+class RetrievalRoute(BaseModel):
+    source: Literal["transcripts", "meeting_notes", "both"] = Field(
+        description="Which index should be searched for this user query."
+    )
+
 
 def rerank(query, candidates, final_top_k: int = FINAL_K):
+    """
+    This probably won't be used as doesn't lead to performance improvement
+    """
+    model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
     texts = []
     idx_map = []  # maps rank-list index -> candidate index
     for i, c in enumerate(candidates):
@@ -77,6 +82,46 @@ def rerank(query, candidates, final_top_k: int = FINAL_K):
 
     return reranked_candidates
 
+def get_routing_prompt(query: str) -> str:
+    return textwrap.dedent(f"""\
+    You are a retrieval router for an internal knowledge assistant.
+
+    Your task is to decide which document source should be searched for the user's query.
+
+    Available sources:
+    1. transcripts
+       - earnings calls
+       - company/financial discussions
+       - executives, prepared remarks, Q&A
+       - company, quarter, year based queries
+
+    2. meeting_notes
+       - internal meeting notes
+       - notes written by a person/author
+       - project updates, sprint planning, tooling discussions, product milestones
+       - author and meeting date based queries
+
+    Routing rules:
+    - Return "transcripts" if the query is primarily about earnings calls, companies, quarters, years, executives, or call discussions.
+    - Return "meeting_notes" if the query is primarily about internal notes, project updates, sprint planning, milestones, tooling, an author, or a meeting date.
+    - Return "both" only if the query is genuinely ambiguous or could reasonably refer to either source.
+    - Prefer the most specific source instead of "both" when possible.
+
+    User query:
+    {query}
+    """)
+
+def route_query(query: str) -> RetrievalRoute:
+    prompt = get_routing_prompt(query)
+
+    response = client.responses.parse(
+        model=deployment_name, # gpt-5.2-chat
+        input=prompt,
+        text_format=RetrievalRoute,
+    )
+
+    return response.output_parsed
+
 def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
     """
     As of now this returns context results using a cosine similarity + BM25 from the query string embedding & content.
@@ -88,6 +133,7 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
     :rtype: tuple[str, str]
     """
     query_embedding = generate_embeddings([query])[0]
+    route = route_query(query)
 
     filter_text = retrieve_filter(query)
     
@@ -97,48 +143,45 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
         fields="embedding"
     )
     
-    
-    transcript_filter = safe_filter_for_index(filter_text, "transcripts")
-    meeting_filter = safe_filter_for_index(filter_text, "meeting_notes")
-
-    transcript_results = TRANSCRIPT_SEARCH_CLIENT.search(
-        #search_text=query,
-        vector_queries=[vector_query],
-        filter = transcript_filter,
-        top=k
-    )
-
-    meeting_results = MEETING_NOTES_SEARCH_CLIENT.search(
-        #search_text=query,
-        vector_queries=[vector_query],
-        filter = meeting_filter,
-        top=k
-    )
-
-    # Convert to list and attach source label
     combined = []
+    # rather than retrieving context and filters for both types of documents we could route to specific ones based on the query
+    if route.source in ("transcripts", "both"):
+        transcript_filter = safe_filter_for_index(filter_text, "transcripts")
+        transcript_results = TRANSCRIPT_SEARCH_CLIENT.search(
+            search_text=query, # hybrid retrieval: populating search_text leads to BM25 score search as well as vector comparison
+            vector_queries=[vector_query],
+            filter = transcript_filter,
+            top=k
+        )
+        for r in transcript_results:
+            r_dict = dict(r)
+            r_dict["_index"] = "transcripts"
+            r_dict["_score"] = r.get("@search.score", 0)
+            combined.append(r_dict)
 
-    for r in transcript_results:
-        r_dict = dict(r)
-        r_dict["_index"] = "transcripts"
-        r_dict["_score"] = r.get("@search.score", 0)
-        combined.append(r_dict)
+    if route.source in ("meeting_notes", "both"):
+        meeting_filter = safe_filter_for_index(filter_text, "meeting_notes")
+        meeting_results = MEETING_NOTES_SEARCH_CLIENT.search(
+            search_text=query, # hybrid retrieval: populating search_text leads to BM25 score search as well as vector comparison
+            vector_queries=[vector_query],
+            filter=meeting_filter,
+            top=k
+        )
 
-    for r in meeting_results:
-        r_dict = dict(r)
-        r_dict["_index"] = "meeting_notes"
-        r_dict["_score"] = r.get("@search.score", 0)
-        combined.append(r_dict)
+        for r in meeting_results:
+            r_dict = dict(r)
+            r_dict["_index"] = "meeting_notes"
+            r_dict["_score"] = r.get("@search.score", 0)
+            combined.append(r_dict)
 
-    # Sort across both indexes by score
     combined_sorted = sorted(
         combined,
         key=lambda x: x["_score"],
         reverse=True
     )
 
-    # Return final top k
     return combined_sorted[:k]
+    
 
 def safe_filter_for_index(filter_text: str, index_kind: str) -> str | None:
     """
@@ -372,12 +415,13 @@ def build_filter(meta):
     return " and ".join(parts)
 
 if __name__ == "__main__":
-    print(retrieve_context("""
-From Reuben's meeting notes on the 28th January 2026 (28/01/2026),
-                the team discussed upcoming product milestones, internal tooling improvements,
-                and priorities for the next development sprint."""))
-    #retrieve_context("What commentary did Amazon provide about international profitability trends during the Amazon Q1 2024 Earnings Call?")
-    
+    test_query = """
+            Summarise discussions about product strategy and roadmap across both
+            internal meeting notes and company transcripts.
+            """
+
+    route = route_query(test_query)
+    print(route)
    
 
 
