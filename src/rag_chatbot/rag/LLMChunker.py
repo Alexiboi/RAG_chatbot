@@ -5,15 +5,25 @@ from src.rag_chatbot.rag.env import client, deployment_name, notes_container_cli
 
 class LLMChunker:
     instructions = """
-    <document> 
-    {WHOLE_DOCUMENT} 
-    </document> 
-    Here is the chunk we want to situate within the whole document 
-    <chunk> 
-    {CHUNK_CONTENT} 
-    </chunk> 
-    Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk.
-    Answer only with the succinct context and nothing else. 
+    <document>
+    {WHOLE_DOCUMENT}
+    </document>
+
+    <chunk>
+    {CHUNK_CONTENT}
+    </chunk>
+
+    Write 1–2 sentences of retrieval-oriented context for this chunk.
+
+    The context should identify:
+    1. the main topic of the chunk,
+    2. where it sits in the document hierarchy,
+    3. any parent epic or story if explicitly present in the document,
+    4. the type of content (e.g. story description, acceptance criteria, implementation note, meeting discussion, action item).
+
+    Prefer explicit document structure over vague summary.
+    Do not invent missing hierarchy.
+    Return only the context. 
     """
     
     def __init__(self):
