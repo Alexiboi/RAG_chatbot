@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useImmer } from 'use-immer';
 import ChatMessages from '@/components/ChatMessages';
 import ChatInput from '@/components/ChatInput';
+import * as api from "@/api";
 
 function Chatbot() {
     /**
@@ -9,13 +10,14 @@ function Chatbot() {
      * messages: holds all messages in current chat, each message contains a role (user/assistant), content, loading and error property
      * newMessage: Stores the current text in the chat input (before it gets submitted)
      */
-    const [chatId, setChatId] = useState(null);
-    // useImmer updates state indirectly by creating a new object copy, as state updates must be performed immutably in react
-    const [messages, setMessages] = useImmer([]);
-    const [newMessage, setNewMessage] = useState('');
+    
+
+  // useImmer updates state indirectly by creating a new object copy, as state updates must be performed immutably in react
+  const [messages, setMessages] = useImmer([]);
+  const [newMessage, setNewMessage] = useState('');
 
 
- const isLoading = messages.length && messages[messages.length - 1].loading;
+  const isLoading = messages.length && messages[messages.length - 1].loading;
 
   async function submitNewMessage() {
     const trimmedMessage = newMessage.trim();
@@ -25,33 +27,19 @@ function Chatbot() {
     // add users message to the chat and placeholder assistant message
     setMessages(draft => [...draft,
         { role: 'user', content: trimmedMessage },
-        { role: 'assistant', content: '', sources: [], loading: true }
+        { role: 'assistant', content: '', sources: [], loading: true, error: false }
     ]);
     setNewMessage('');
 
-    let chatIdOrNew = chatId;
     try {
-        if (!chatId) {
-            // if there is no existing chat session we create a new one with the api
-        const { id } = await api.createChat();
-        setChatId(id);
-        chatIdOrNew = id;
-        }
-        // use api to send user's message to the backend which returns a stream as a response
-        const stream = await api.sendChatMessage(chatIdOrNew, trimmedMessage);
-        /**parseSSEStream convert the SSE stream into an async iterator of text chunks
-         * for each new chunk we receive we update the assistant message, creating
-         * a real-time streaming effect
-         */
-        for await (const textChunk of parseSSEStream(stream)) {
-        setMessages(draft => {
-            draft[draft.length - 1].content += textChunk;
-        });
-        }
-        //once response finishes streaming, set assistant message's loading property to false
-        setMessages(draft => {
-        draft[draft.length - 1].loading = false;
-        });
+      const data = await api.sendMessage(trimmedMessage);
+
+      setMessages(draft => {
+        const lastMessage = draft[draft.length - 1];
+        lastMessage.content = data.answer; // maybe data.response.answer depends on api response format
+        lastMessage.loading = false;
+        lastMessage.error = false;
+      })
     } catch (err) {
         // if there are any errors we set the assistant message's error property True to display an error message in the chat
         console.log(err);
@@ -64,10 +52,14 @@ function Chatbot() {
 
   return (
     // If there are no messages in chat, display the welcome message
-    <div>
+    <div className='relative grow flex flex-col gap-6 pt-6'>
     
       {messages.length === 0 && (
-        <div>{/* Chatbot welcome message */}</div>
+        <div className='mt-3 font-urbanist text-primary-blue text-xl font-light space-y-2'>
+          <p>👋 Welcome!</p>
+          <p>I have access to earnings calls from multiple companies and meeting notes</p>
+          <p>I also have capability to interact with Jira and create Issues using MCP</p>
+        </div>
       )}
       <ChatMessages
         messages={messages}
