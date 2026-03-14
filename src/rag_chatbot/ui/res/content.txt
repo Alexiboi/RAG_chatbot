@@ -1,3 +1,0 @@
-LOGO=ui/res/company_logo.png
-CHATBOT_NAME=RAG LLM
-COMPANY_NAME=Earning calls
