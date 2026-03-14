@@ -18,13 +18,26 @@ class GeneralLLM:
     General LLM just straight call to GPT
     """
     @staticmethod
-    def generate_answer(user_query) -> dict:
-        response = client.responses.create(
-            model=deployment_name,
-            input = user_query
-            #temperature=0.2
-        )
+    def generate_answer(user_query: str, history: list[dict]) -> str:
+        messages = []
 
+        for msg in history[-6:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+        messages.append({"role": "user", "content": user_query})
+
+        response = client.chat.completions.create(
+            model=deployment_name,
+            messages=messages
+        )
+        # response = client.responses.create(
+        #     model=deployment_name,
+        #     input = user_query
+        # )
+        return response.choices[0].message.content
         return response.output_text
     
 
@@ -58,41 +71,52 @@ class MCPLLM:
 
 class RAGLLM:
     @staticmethod
-    def generate_answer(user_query, context) -> dict:
+    def generate_answer(user_query: str, context: list[dict], history: list[dict]) -> str:
         
         
         context_texts = [doc["content"] for doc in context]
 
         context_block = "\n\n---\n\n".join(context_texts)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful assistant. "
+                    "Use the retrieved document context when relevant. "
+                    "If the user is asking specifically about documents and the answer "
+                    "is not in them, say there is not enough information."
+                )
+            }
+        ]
 
-        prompt = f"""
-        You are a helpful assistant.
+        for msg in history[-6:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
 
-        Use the retrieved document context when it is relevant to the user's question.
-        If the user's question is about the retrieved documents, answer from that context and do not invent missing facts.
-        If the retrieved context is irrelevant or insufficient and the user is asking a general question, answer using your general knowledge.
-        If the user is specifically asking about the documents and the answer is not contained in them, say that the documents do not contain enough information.
+        messages.append({
+            "role": "user",
+            "content": f"""
+                    Retrieved context:
+                    {context_block}
 
-        When useful, make it clear whether your answer is based on the documents or on general knowledge.
-        
+                    User question:
+                    {user_query}
 
-       
-        Retrieved context:
-        {context_block}
+                    Answer:
+                    """
+        })
 
-        User question:
-        {user_query}
-
-        Answer:
-        """
-
-        response = client.responses.create(
+        response = client.chat.completions.create(
             model=deployment_name,
-            input = prompt
-            #temperature=0.2
+            messages=messages
         )
 
-        return response.output_text
+        return response.choices[0].message.content
+       
+
+       
 
 def get_routing_prompt(user_query: str) -> str:
     prompt = f"""
@@ -154,7 +178,7 @@ def build_grounded_task(user_query: str, context: list[dict]):
     )
     return response.output_text
 
-async def handle_chat(user_query: str) -> dict:
+async def handle_chat(user_query: str, history: list[dict]) -> dict:
     """
     depending on route returned will call the corresponding method 
     """
@@ -162,7 +186,7 @@ async def handle_chat(user_query: str) -> dict:
 
     if route == "general":
         return {
-            "answer": GeneralLLM.generate_answer(user_query=user_query),
+            "answer": GeneralLLM.generate_answer(user_query=user_query, history=history),
             "mode": "general",
         }
      
@@ -171,7 +195,7 @@ async def handle_chat(user_query: str) -> dict:
     elif route == "rag":
         context = retrieve_context(user_query)
         return {
-            "answer": RAGLLM.generate_answer(user_query=user_query, context=context),
+            "answer": RAGLLM.generate_answer(user_query=user_query, context=context, history=history),
             "mode": "rag",
             "retrieved": context
         }
@@ -209,7 +233,7 @@ async def handle_chat(user_query: str) -> dict:
             await mcp_llm.cleanup()
     else:
         return {
-            "answer": GeneralLLM.generate_answer(user_query=user_query),
+            "answer": GeneralLLM.generate_answer(user_query=user_query, history=history),
             "mode": "general",
         }
 
@@ -263,5 +287,6 @@ def generate_contextualized_response(inputs: dict) -> dict:
         "retrieved": context_results
     }
 
-async def chat_loop(user_query: str):
-    return await handle_chat(user_query)
+async def chat_loop(user_query: str, history: list[dict] | None = None):
+    history = history or []
+    return await handle_chat(user_query, history)
