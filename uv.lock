@@ -2090,6 +2090,7 @@ dependencies = [
     { name = "pytest" },
     { name = "redis" },
     { name = "sentence-transformers" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -2106,6 +2107,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "redis", specifier = ">=7.3.0" },
     { name = "sentence-transformers", specifier = ">=5.2.3" },
+    { name = "uvicorn", specifier = ">=0.41.0" },
 ]
 
 [[package]]

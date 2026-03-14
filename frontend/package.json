@@ -4,12 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "frontend": "vite",
-    "backend": "cd .. & .venv\\Scripts\\python -m uvicorn src.rag_chatbot.main:app --reload --port 8000",
-    "dev": "concurrently \"npm run frontend\" \"npm run backend\""
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.2.4",
