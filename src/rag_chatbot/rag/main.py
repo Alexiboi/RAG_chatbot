@@ -3,8 +3,7 @@ import asyncio
 
 from src.rag_chatbot.rag.blob_utils import chunk_from_blob
 from src.rag_chatbot.rag.embedding_utils import process_and_store_chunks
-from src.rag_chatbot.rag.RAG_bot import generate_response, chat_loop
-from src.rag_chatbot.rag.retrieval_utils import retrieve_context
+from src.rag_chatbot.rag.RAG_bot import chat_loop
 from src.rag_chatbot.rag.env import transcript_container_client, notes_container_client
 
 async def main():

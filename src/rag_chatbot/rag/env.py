@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from azure.storage.blob import ContainerClient
-from openai import AzureOpenAI, OpenAI
+from openai import OpenAI
 
 
 load_dotenv()

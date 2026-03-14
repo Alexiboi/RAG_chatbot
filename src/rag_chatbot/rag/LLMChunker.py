@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from src.rag_chatbot.rag.env import client, deployment_name, notes_container_client
+from src.rag_chatbot.rag.env import client, deployment_name
 
 
 class LLMChunker:

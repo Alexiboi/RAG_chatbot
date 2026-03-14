@@ -3,9 +3,6 @@ from mcp.server.fastmcp import FastMCP
 import os
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
-import json
-import asyncio
-import requests
 
 load_dotenv()
 
