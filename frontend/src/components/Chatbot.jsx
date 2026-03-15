@@ -17,6 +17,8 @@ function Chatbot() {
   const [messages, setMessages] = useImmer([]);
   const [newMessage, setNewMessage] = useState('');
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // isLoading is True if the last message in the chat is currently loading.
   // used to stop user sending a message while the assistant is responding/loading
@@ -159,9 +161,14 @@ function Chatbot() {
     }
   }
 
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    document.documentElement.classList.toggle('dark');
+  };
+
   return (
     <div className="flex h-full min-h-0">
-      <aside className="w-64 shrink-0 border-r border-primary-blue/20 bg-white/60 p-4">
+      <aside className="w-64 shrink-0 border-r border-primary-blue/20 bg-white/60 p-4 flex flex-col">
         <button
           onClick={handleCreateNewChat}
           className="mb-4 w-full rounded-xl bg-primary-blue px-4 py-3 text-left font-urbanist text-white transition hover:opacity-90"
@@ -169,7 +176,7 @@ function Chatbot() {
           + New chat
         </button>
 
-        <div className="space-y-2 overflow-y-auto">
+        <div className="space-y-2 overflow-y-auto grow">
           {chats.map(chat => (
             <button
               key={chat.id}
@@ -186,7 +193,39 @@ function Chatbot() {
             </button>
           ))}
         </div>
+
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="mt-4 w-full rounded-xl bg-primary-blue px-4 py-3 text-left font-urbanist text-white transition hover:opacity-90"
+        >
+          Settings
+        </button>
       </aside>
+
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h2 className="text-xl font-semibold mb-4">Settings</h2>
+            <div className="mb-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={isDarkMode}
+                  onChange={toggleDarkMode}
+                  className="mr-2"
+                />
+                <span>Dark Mode</span>
+              </label>
+            </div>
+            <button
+              onClick={() => setIsSettingsOpen(false)}
+              className="bg-primary-blue text-white px-4 py-2 rounded hover:opacity-90"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="relative flex grow flex-col gap-6 pt-6 px-16 min-h-0">
         <header className='sticky top-0 shrink-0 z-20 bg-white pb-2'>

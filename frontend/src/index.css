@@ -114,3 +114,36 @@ layer(base);
     @apply bg-primary-blue/50 border border-white rounded-sm;
   }
 }
+
+.dark body, .dark html, .dark #root {
+  background-color: #1a1a1a;
+  color: #ffffff;
+}
+
+.dark .bg-white\/60 {
+  background-color: rgba(31, 41, 55, 0.6); /* gray-800/60 */
+}
+
+.dark .bg-white {
+  background-color: #1a1a1a;
+}
+
+.dark .text-main-text {
+  color: #ffffff;
+}
+
+.dark .text-main-text\/80 {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dark .border-primary-blue\/20 {
+  border-color: rgba(74, 158, 255, 0.2);
+}
+
+.dark .bg-primary-blue\/10 {
+  background-color: rgba(74, 158, 255, 0.1);
+}
+
+.dark .bg-primary-blue\/20 {
+  background-color: rgba(74, 158, 255, 0.2);
+}
