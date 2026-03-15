@@ -29,5 +29,12 @@ services:
     depends_on:
       - backend
 
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./frontend/src
+          target: /frontend/src
+
+
 volumes:
   redis_data:
