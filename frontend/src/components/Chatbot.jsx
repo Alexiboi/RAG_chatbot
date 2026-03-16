@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useImmer } from 'use-immer';
+import { Sun, Moon } from "lucide-react";
 import ChatMessages from '@/components/ChatMessages';
 import ChatInput from '@/components/ChatInput';
 import * as api from '@/api';
@@ -290,28 +291,45 @@ function Chatbot() {
       </aside>
 
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h2 className="text-xl font-semibold mb-4">Settings</h2>
-            <div className="mb-4">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={isDarkMode}
-                  onChange={toggleDarkMode}
-                  className="mr-2"
-                />
-                <span>Dark Mode</span>
-              </label>
-            </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="w-96 rounded-lg bg-white p-6 dark:bg-gray-900">
+          <h2 className="mb-6 text-xl font-semibold text-main-text">Settings</h2>
+
+          <div className="mb-6 flex items-center justify-between">
+            <span className="text-main-text">Dark Mode</span>
+
             <button
-              onClick={() => setIsSettingsOpen(false)}
-              className="bg-primary-blue text-white px-4 py-2 rounded hover:opacity-90"
+              onClick={toggleDarkMode}
+              type="button"
+              role="switch"
+              aria-checked={isDarkMode}
+              aria-label="Toggle dark mode"
+              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-300 ${
+                isDarkMode ? "bg-primary-blue" : "bg-gray-300"
+              }`}
             >
-              Close
+              <span
+                className={`absolute left-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-md transition-transform duration-300 ${
+                  isDarkMode ? "translate-x-7" : "translate-x-0"
+                }`}
+              >
+                {isDarkMode ? (
+                  <Moon size={12} className="text-main-text" />
+                ) : (
+                  <Sun size={12} className="text-main-text" />
+                )}
+              </span>
             </button>
           </div>
+
+          <button
+            onClick={() => setIsSettingsOpen(false)}
+            className="w-full rounded bg-primary-blue px-4 py-2 text-white hover:opacity-90"
+          >
+            Close
+          </button>
         </div>
+      </div>
       )}
 
       <div className="relative flex grow flex-col gap-6 pt-6 px-16 min-h-0 overflow-hidden">
