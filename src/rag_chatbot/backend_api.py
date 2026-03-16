@@ -10,6 +10,7 @@ from src.rag_chatbot.redis.redis_chat_store import (
     append_message,
     list_chats,
     update_chat_title,
+    delete_chat,
 )
 from src.rag_chatbot.redis.redis_client import get_redis
 
@@ -78,3 +79,11 @@ async def chat(chat_id: str, chat_in: ChatIn, rdb = Depends(get_redis)):
     # Result is a dictionary containing answer, mode and potentially retrieved as keys,
     # frontend uses data.answer to display the assistant message#
     return result
+
+@router.delete("/chats/{chat_id}")
+async def delete_chat_endpoint(chat_id: str, rdb = Depends(get_redis)):
+    """Delete a chat and its message history."""
+    if not await chat_exists(rdb, chat_id):
+        raise HTTPException(status_code=404, detail="Chat not found")
+    await delete_chat(rdb, chat_id)
+    return {"ok": True}
