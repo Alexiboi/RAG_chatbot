@@ -19,6 +19,7 @@ function Chatbot() {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [openChatMenuId, setOpenChatMenuId] = useState(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -108,11 +109,42 @@ function Chatbot() {
     if (chatId === activeChatId || isLoading) return;
 
     try {
+      setOpenChatMenuId(null);
       setActiveChatId(chatId);
       const chatMessages = await api.getChatMessages(chatId);
       setMessages(chatMessages);
     } catch (err) {
       console.error('Failed to load chat messages:', err);
+    }
+  }
+
+  async function handleDeleteChat(chatId) {
+    // Do nothing if we're currently waiting on a response in the active chat.
+    if (isLoading) return;
+
+    try {
+      await api.deleteChat(chatId);
+
+      const remainingChats = chats.filter(c => c.id !== chatId);
+      setChats(remainingChats);
+      setOpenChatMenuId(null);
+
+      // If we deleted the currently open chat, switch to another one (or create a new one).
+      if (chatId === activeChatId) {
+        if (remainingChats.length > 0) {
+          const nextChatId = remainingChats[0].id;
+          setActiveChatId(nextChatId);
+          const chatMessages = await api.getChatMessages(nextChatId);
+          setMessages(chatMessages);
+        } else {
+          const newChat = await api.createChat();
+          setChats([newChat]);
+          setActiveChatId(newChat.id);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
     }
   }
 
@@ -195,21 +227,58 @@ function Chatbot() {
         </button>
 
         <div className="space-y-2 overflow-y-auto grow">
-          {chats.map(chat => (
-            <button
-              key={chat.id}
-              onClick={() => handleSelectChat(chat.id)}
-              className={`block w-full rounded-xl px-3 py-3 text-left transition ${
-                chat.id === activeChatId
-                  ? 'bg-primary-blue/20 text-main-text'
-                  : 'hover:bg-primary-blue/10 text-main-text/80'
-              }`}
-            >
-              <div className="truncate font-medium">
-                {chat.title || 'New Chat'}
+          {chats.map(chat => {
+            const isActive = chat.id === activeChatId;
+            return (
+              <div key={chat.id} className="relative">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectChat(chat.id)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelectChat(chat.id);
+                    }
+                  }}
+                  className={`block w-full rounded-xl px-3 py-3 pr-10 text-left transition ${
+                    isActive
+                      ? 'bg-primary-blue/20 text-main-text'
+                      : 'hover:bg-primary-blue/10 text-main-text/80'
+                  }`}
+                >
+                  <div className="truncate font-medium">
+                    {chat.title || 'New Chat'}
+                  </div>
+                </div>
+
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setOpenChatMenuId(prev => (prev === chat.id ? null : chat.id));
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-sm text-main-text/60 hover:bg-primary-blue/10 hover:text-main-text focus:outline-none"
+                  aria-label="Chat options"
+                >
+                  ⋯
+                </button>
+
+                {openChatMenuId === chat.id && (
+                  <div className="absolute right-2 top-full mt-1 w-32 rounded-lg border border-primary-blue/20 bg-white shadow-lg z-10">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleDeleteChat(chat.id);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-error-red hover:bg-error-red/10"
+                    >
+                      Delete chat
+                    </button>
+                  </div>
+                )}
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
 
         <button
