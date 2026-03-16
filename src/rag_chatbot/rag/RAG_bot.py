@@ -11,6 +11,11 @@ class QueryRoute(BaseModel):
         description="Which category should the user query be placed in"
     )
 
+class MCPRoute(BaseModel):
+    source: Literal["mcp", "rag_then_mcp"] = Field(
+        description="Whether the request needs direct tool use only, or retrieval first then tool use"
+    )
+
 class GeneralLLM:
     """
     General LLM just straight call to GPT
@@ -36,7 +41,6 @@ class GeneralLLM:
         #     input = user_query
         # )
         return response.choices[0].message.content
-        return response.output_text
     
 
 class MCPLLM:
@@ -114,7 +118,30 @@ class RAGLLM:
         return response.choices[0].message.content
        
 
-       
+def decide_mcp_subroute(user_query: str) -> str:
+    prompt = f"""
+    Classify this user request into one of:
+    - mcp
+    - rag_then_mcp
+
+    Definitions:
+    - mcp: the request can be completed directly using tools/actions
+    - rag_then_mcp: the request first needs company document retrieval, then a tool action
+
+    User query: {user_query}
+
+    Return only one of:
+    - mcp
+    - rag_then_mcp
+    """
+
+    response = client.responses.parse(
+        model=deployment_name,
+        input=prompt,
+        text_format=MCPRoute,
+    )
+
+    return response.output_parsed.source
 
 def get_routing_prompt(user_query: str) -> str:
     prompt = f"""
@@ -133,7 +160,7 @@ def get_routing_prompt(user_query: str) -> str:
     User query: {user_query}
 
     - Return "general" if the query can be answered without external documents or tool actions
-    - Return "rag" if the query requires searching external documents
+    - Return "rag" if the query explicitly states to retrieve or find information using external documents
     - Return "mcp" If the query specifies taking an external action using a tool
     - Return "rag_then_mcp" If the query requires searching documents first, then taking an action. For example the query:
     "Create Jira tickets from today's meeting notes" should be classified as "rag_then_mcp" because meeting notes can only be
@@ -141,7 +168,21 @@ def get_routing_prompt(user_query: str) -> str:
     """
     return prompt
 
-def decide_route(user_query: str) -> str:
+def decide_route(user_query: str, mode: str = "auto") -> str:
+    # if the user has specified the query mode which is anything else but auto
+    # the route should be returned as their decision, and if their choice is to use mcp,
+    # the llm should decide whether their prompt requires mcp and rag or just mcp#
+    if mode != "auto":
+        match mode:
+            case "llm":
+                return "general"
+            case "rag":
+                return "rag"
+            case "mcp":
+                return decide_mcp_subroute(user_query)
+            case _:
+                pass
+
     prompt = get_routing_prompt(user_query)
 
     response = client.responses.parse(
@@ -176,11 +217,11 @@ def build_grounded_task(user_query: str, context: list[dict]):
     )
     return response.output_text
 
-async def handle_chat(user_query: str, history: list[dict]) -> dict:
+async def handle_chat(user_query: str, history: list[dict], mode: str = "auto") -> dict:
     """
     depending on route returned will call the corresponding method 
     """
-    route = decide_route(user_query)
+    route = decide_route(user_query, mode)
 
     if route == "general":
         return {
@@ -285,6 +326,6 @@ def generate_contextualized_response(inputs: dict) -> dict:
         "retrieved": context_results
     }
 
-async def chat_loop(user_query: str, history: list[dict] | None = None):
+async def chat_loop(user_query: str, history: list[dict] | None = None, mode: str = "auto"):
     history = history or []
-    return await handle_chat(user_query, history)
+    return await handle_chat(user_query, history, mode)
