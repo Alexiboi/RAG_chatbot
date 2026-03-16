@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { useImmer } from 'use-immer';
 import { Sun, Moon } from "lucide-react";
 import ChatMessages from '@/components/ChatMessages';
@@ -21,6 +21,15 @@ function Chatbot() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState(null);
+  const [selectedMode, setSelectedMode] = useState(() => {
+    return localStorage.getItem("chatMode") || "auto";
+  });
+
+  
+  useEffect(() => {
+    localStorage.setItem("chatMode", selectedMode);
+  }, [selectedMode]);
+
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -46,6 +55,8 @@ function Chatbot() {
     () => chats.find(chat => chat.id === activeChatId) || null,
     [chats, activeChatId]
   );
+
+
 
   useEffect(() => {
     async function loadInitialChats() {
@@ -173,7 +184,7 @@ function Chatbot() {
       // calls chat_loop in backend with history from redis 
       // then stores user + assistant messages in Redis
       // then backend returns assistant answer here
-      const data = await api.sendChatMessage(activeChatId, trimmedMessage);
+      const data = await api.sendChatMessage(activeChatId, trimmedMessage, selectedMode);
       
       /**
        * Takes last message which was assistant placeholder message
@@ -322,6 +333,21 @@ function Chatbot() {
             </button>
           </div>
 
+          <div className="mb-6 flex items-center justify-between">
+            <span className="text-main-text">Assistant Mode</span>
+
+            <select
+              value={selectedMode}
+              onChange={e => setSelectedMode(e.target.value)}
+              className="rounded-lg border border-primary-blue/20 bg-white px-3 py-2 text-sm text-main-text focus:outline-none dark:bg-gray-800"
+            >
+              <option value="auto">Auto</option>
+              <option value="llm">General LLM</option>
+              <option value="rag">RAG</option>
+              <option value="mcp">MCP</option>
+            </select>
+          </div>
+
           <button
             onClick={() => setIsSettingsOpen(false)}
             className="w-full rounded bg-primary-blue px-4 py-2 text-white hover:opacity-90"
@@ -359,6 +385,8 @@ function Chatbot() {
           isLoading={isLoading || !activeChatId}
           setNewMessage={setNewMessage}
           submitNewMessage={submitNewMessage}
+          selectedMode={selectedMode}
+          setSelectedMode={setSelectedMode}
         />
       </div>
     </div>

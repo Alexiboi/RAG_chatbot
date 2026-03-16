@@ -1,7 +1,14 @@
 import useAutosize from '@/hooks/useAutosize';
 import sendIcon from '@/assets/images/send.svg';
 
-function ChatInput({ newMessage, isLoading, setNewMessage, submitNewMessage }) {
+function ChatInput({ 
+  newMessage,
+  isLoading,
+  setNewMessage,
+  submitNewMessage,
+  selectedMode,
+  setSelectedMode 
+}) {
   const textareaRef = useAutosize(newMessage);
 
   function handleKeyDown(e) {
@@ -13,6 +20,22 @@ function ChatInput({ newMessage, isLoading, setNewMessage, submitNewMessage }) {
   
   return(
     <div className='sticky bottom-0 shrink-0 bg-white py-4'>
+        <div className="mb-2 flex items-center justify-between px-2 text-sm">
+          <span className="text-main-text/70">Mode</span>
+
+          <select
+            value={selectedMode}
+            onChange={e => setSelectedMode(e.target.value)}
+            className="rounded-md border border-primary-blue/20 bg-white px-2 py-1 text-main-text focus:outline-none"
+            disabled={isLoading}
+          >
+            <option value="auto">Auto</option>
+            <option value="llm">LLM</option>
+            <option value="rag">RAG</option>
+            <option value="mcp">MCP</option>
+          </select>
+        </div>
+
       <div className='p-1.5 bg-primary-blue/35 rounded-3xl z-50 font-mono origin-bottom animate-chat duration-400'>
         <div className='pr-0.5 bg-white relative shrink-0 rounded-3xl overflow-hidden ring-primary-blue ring-1 focus-within:ring-2 transition-all'>
           <textarea
@@ -31,6 +54,8 @@ function ChatInput({ newMessage, isLoading, setNewMessage, submitNewMessage }) {
           </button>
         </div>
       </div>
+
+
     </div>
   );
 }
