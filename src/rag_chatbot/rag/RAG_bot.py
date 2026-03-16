@@ -201,7 +201,13 @@ def build_grounded_task(user_query: str, context: list[dict]):
     You are preparing an action request for a tool-using assistant.
 
     Use the document context below to interpret the user's request.
-    Extract the actionable items and produce a concise tool-ready instruction.
+    Create a precise instruction for the tool agent.
+
+    Requirements:
+    - Include only actions supported by the user request
+    - Preserve names, dates, epics, stories, tasks, and priorities where present
+    - Do not invent details not supported by the context
+    - If multiple tasks are needed, list them clearly in one concise instruction.
 
     Context:
     {context_block}
@@ -233,6 +239,14 @@ async def handle_chat(user_query: str, history: list[dict], mode: str = "auto") 
 
     elif route == "rag":
         context = retrieve_context(user_query)
+        # fallback in case there is no context for some reason
+        if not context:
+            return {
+                "answer": "I couldn't find relevant information in the documents for that request.",
+                "mode": "rag",
+                "retrieved": []
+            }
+        
         return {
             "answer": RAGLLM.generate_answer(user_query=user_query, context=context, history=history),
             "mode": "rag",
