@@ -257,7 +257,7 @@ function Chatbot() {
                     e.stopPropagation();
                     setOpenChatMenuId(prev => (prev === chat.id ? null : chat.id));
                   }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-sm text-main-text/60 hover:bg-primary-blue/10 hover:text-main-text focus:outline-none"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-lg text-main-text/80 hover:bg-primary-blue/10 hover:text-main-text focus:outline-none"
                   aria-label="Chat options"
                 >
                   ⋯
