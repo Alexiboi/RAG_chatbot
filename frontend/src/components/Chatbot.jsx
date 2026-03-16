@@ -20,6 +20,17 @@ function Chatbot() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   // isLoading is True if the last message in the chat is currently loading.
   // used to stop user sending a message while the assistant is responding/loading
   const isLoading =
@@ -162,13 +173,20 @@ function Chatbot() {
   }
 
   const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    if (newMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
   };
 
   return (
-    <div className="flex h-full min-h-0">
-      <aside className="w-64 shrink-0 border-r border-primary-blue/20 bg-white/60 p-4 flex flex-col">
+    <div className="flex h-screen min-h-0 overflow-hidden">
+      <aside className="sticky top-0 h-screen w-64 shrink-0 border-r border-primary-blue/20 bg-white/60 p-4 flex flex-col">
         <button
           onClick={handleCreateNewChat}
           className="mb-4 w-full rounded-xl bg-primary-blue px-4 py-3 text-left font-urbanist text-white transition hover:opacity-90"
@@ -227,7 +245,7 @@ function Chatbot() {
         </div>
       )}
 
-      <div className="relative flex grow flex-col gap-6 pt-6 px-16 min-h-0">
+      <div className="relative flex grow flex-col gap-6 pt-6 px-16 min-h-0 overflow-hidden">
         <header className='sticky top-0 shrink-0 z-20 bg-white pb-2'>
           <h1 className='font-urbanist text-[1.65rem] font-semibold'>{activeChat?.title || 'Tech Trends AI Chatbot'}</h1>
         </header>

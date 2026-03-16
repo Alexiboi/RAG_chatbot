@@ -8,7 +8,7 @@ function ChatMessages({ messages, isLoading }) {
   const scrollContentRef = useAutoScroll(isLoading);
   
   return (
-    <div ref={scrollContentRef} className='grow space-y-4'>
+    <div ref={scrollContentRef} className='flex-1 min-h-0 overflow-y-auto space-y-4'>
       {messages.map(({ role, content, loading, error }, idx) => (
         <div key={idx} className={`flex items-start gap-4 py-4 px-3 rounded-xl ${role === 'user' ? 'bg-primary-blue/10' : ''}`}>
           {role === 'user' && (
