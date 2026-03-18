@@ -48,7 +48,7 @@ class MCPLLM:
     path_to_server = str(
         Path(__file__).resolve().parents[1] / "mcp" / "servers" / "jira_server.py"
     )
-    #path_to_server = r"C:\Users\alexh\Desktop\LLM_uni_project\RAG_chatbot\src\rag_chatbot\mcp\servers\jira_server.py"
+    
     def __init__(self):
         self.client = MCPClient()
         self.connected = False

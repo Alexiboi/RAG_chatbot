@@ -14,7 +14,7 @@ DEPLOYMENT_NAME = "gpt-5.2-chat"
 load_dotenv()
 
 AZURE_OPENAI_API_KEY=os.getenv("AZURE_OPENAI_API_KEY")
-
+BASE_URL = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 class MCPClient:
     def __init__(self):
@@ -22,7 +22,7 @@ class MCPClient:
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self.client = OpenAI(
-            base_url="https://alex-mltg6myf-eastus2.openai.azure.com/openai/v1/",
+            base_url=BASE_URL, 
             api_key=AZURE_OPENAI_API_KEY
         )
 

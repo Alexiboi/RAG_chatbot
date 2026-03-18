@@ -10,17 +10,12 @@ load_dotenv()
 # Initialize FastMCP server
 mcp = FastMCP("jira_server")
 
-project_name = "MCP-test"
-
-PROJ_KEY="KAN"
 
 BASE_DOMAIN = "alexhanna413"
 JIRA_API_BASE = f"https://{BASE_DOMAIN}.atlassian.net/rest/api/3" # /issue is for creating issues
 
 JIRA_API_KEY = os.getenv("JIRA_API_TOKEN")
 JIRA_API_EMAIL = os.getenv("JIRA_EMAIL")
-
-
 
 
 async def make_jira_issue_request(proj_key: str="KAN", summary: str="", description: str=""):
@@ -55,7 +50,6 @@ async def make_jira_issue_request(proj_key: str="KAN", summary: str="", descript
         except Exception as e:
             return str(e)
     
-#helper function
 def jira_description(text: str):
     """
     Takes text for description of a task and puts it in the correct format
@@ -73,30 +67,6 @@ def jira_description(text: str):
             }
         ]
     }
-
-@mcp.tool()
-async def create_jira_issue(summary: str, description: str, proj_key: str) -> str:
-    """
-    Create an Issue on Jira in a specific project/space specified by proj_key
-    
-    Args:
-        summary: Title of the issue/ticket
-        description: description of the issue
-        proj_key: project key specifying the project we want to create an Issue/task in
-    """
-    jira_site = "https://alexhanna413.atlassian.net/"
-
-    response = await make_jira_issue_request(
-        proj_key=proj_key,
-        summary=summary,
-        description=description)
-    if not response:
-        return "Unable to make Jira Request"
-    return f"""
-        "issue_key": {response['key']},
-        "issue_url":{jira_site}/browse/{response['key']},
-        "message": Jira issue **{response['key']}** created successfully"
-    """
 
 async def test():
     response = await list_jira_projects()
@@ -143,6 +113,30 @@ async def list_jira_projects():
     ]
 
     return projects
+
+@mcp.tool()
+async def create_jira_issue(summary: str, description: str, proj_key: str) -> str:
+    """
+    Create an Issue on Jira in a specific project/space specified by proj_key
+    
+    Args:
+        summary: Title of the issue/ticket
+        description: description of the issue
+        proj_key: project key specifying the project we want to create an Issue/task in
+    """
+    jira_site = "https://alexhanna413.atlassian.net/"
+
+    response = await make_jira_issue_request(
+        proj_key=proj_key,
+        summary=summary,
+        description=description)
+    if not response:
+        return "Unable to make Jira Request"
+    return f"""
+        "issue_key": {response['key']},
+        "issue_url":{jira_site}/browse/{response['key']},
+        "message": Jira issue **{response['key']}** created successfully"
+    """
 
 def main():
     mcp.run(transport="stdio")
