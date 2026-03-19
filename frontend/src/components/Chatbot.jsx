@@ -22,6 +22,7 @@ function Chatbot() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [openChatMenuId, setOpenChatMenuId] = useState(null);
   const [selectedMode, setSelectedMode] = useState("auto");
+  const [chatPendingDelete, setChatPendingDelete] = useState(null);
 
   
   useEffect(() => {
@@ -129,7 +130,7 @@ function Chatbot() {
     }
   }
 
-  async function handleDeleteChat(chatId) {
+  async function confirmDeleteChat(chatId) {
     // Do nothing if we're currently waiting on a response in the active chat.
     if (isLoading) return;
 
@@ -139,7 +140,7 @@ function Chatbot() {
       const remainingChats = chats.filter(c => c.id !== chatId);
       setChats(remainingChats);
       setOpenChatMenuId(null);
-
+      setChatPendingDelete(null);
       // If we deleted the currently open chat, switch to another one (or create a new one).
       if (chatId === activeChatId) {
         if (remainingChats.length > 0) {
@@ -157,6 +158,12 @@ function Chatbot() {
     } catch (err) {
       console.error('Failed to delete chat:', err);
     }
+  }
+
+  function handleDeleteChat(chat) {
+    if (isLoading) return;
+    setOpenChatMenuId(null);
+    setChatPendingDelete(chat);
   }
 
   async function submitNewMessage() {
@@ -279,7 +286,7 @@ function Chatbot() {
                     <button
                       onClick={e => {
                         e.stopPropagation();
-                        handleDeleteChat(chat.id);
+                        handleDeleteChat(chat);
                       }}
                       className="w-full px-3 py-2 text-left text-sm text-error-red hover:bg-error-red/10"
                     >
@@ -355,6 +362,46 @@ function Chatbot() {
           </button>
         </div>
       </div>
+      )}
+
+      {chatPendingDelete && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setChatPendingDelete(null)} // close on backdrop click
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900"
+            onClick={e => e.stopPropagation()} // prevent closing when clicking inside
+          >
+            <h2 className="mb-3 text-xl font-semibold text-main-text">
+              Delete chat?
+            </h2>
+
+            <p className="mb-6 text-main-text/80">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">
+                {chatPendingDelete.title || "this chat"}
+              </span>
+              ? This action cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setChatPendingDelete(null)}
+                className="rounded-lg border border-primary-blue/20 px-4 py-2 text-main-text hover:bg-primary-blue/10"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => confirmDeleteChat(chatPendingDelete.id)}
+                className="rounded-lg bg-error-red px-4 py-2 text-white hover:opacity-90"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="relative flex grow flex-col gap-6 pt-6 px-16 min-h-0 overflow-hidden">
