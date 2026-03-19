@@ -7,6 +7,8 @@ from src.rag_chatbot.rag.env import deployment_name, client
 from src.rag_chatbot.mcp.servers.clients.MCPClient import MCPClient
 from pathlib import Path
 
+HISTORY_LEN = 6
+
 class QueryRoute(BaseModel):
     source: Literal["general", "rag", "mcp", "rag_then_mcp"] = Field(
         description="Which category should the user query be placed in"
@@ -25,7 +27,7 @@ class GeneralLLM:
     def generate_answer(user_query: str, history: list[dict]) -> str:
         messages = []
 
-        for msg in history[-6:]:
+        for msg in history[-HISTORY_LEN:]:
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"]
@@ -37,10 +39,7 @@ class GeneralLLM:
             model=deployment_name,
             messages=messages
         )
-        # response = client.responses.create(
-        #     model=deployment_name,
-        #     input = user_query
-        # )
+      
         return response.choices[0].message.content
     
 
@@ -63,11 +62,21 @@ class MCPLLM:
             print(f"Exception occured {e}")
             raise
     
-    async def generate_answer(self, user_query: str) -> str:
+    async def generate_answer(self, user_query: str, history: list[dict]) -> str:
+        messages = []
+
+        for msg in history[-HISTORY_LEN:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
         
+        messages.append({"role": "user", "content": user_query})
+
         await self.connect_to_MCPserver()
         
-        response = await self.client.process_query(user_query)
+        # message passed in includes history
+        response = await self.client.process_query(query=messages)
         
         return response
     async def cleanup(self):
@@ -95,7 +104,7 @@ class RAGLLM:
             }
         ]
 
-        for msg in history[-6:]:
+        for msg in history[-HISTORY_LEN:]:
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"]
@@ -262,7 +271,7 @@ async def handle_chat(user_query: str, history: list[dict], mode: str = "auto") 
         try:
                 
             return {
-                "answer": await mcp_llm.generate_answer(user_query=user_query),
+                "answer": await mcp_llm.generate_answer(user_query=user_query, history=history),
                 "mode": "mcp",
             }
         finally:
@@ -279,7 +288,7 @@ async def handle_chat(user_query: str, history: list[dict], mode: str = "auto") 
             if not isinstance(grounded_task, str):
                 grounded_task = json.dumps(grounded_task)
 
-            mcp_result = await mcp_llm.generate_answer(user_query=grounded_task)
+            mcp_result = await mcp_llm.generate_answer(user_query=grounded_task, history=history)
             return {
                 "answer": mcp_result,
                 "mode": "rag_then_mcp",

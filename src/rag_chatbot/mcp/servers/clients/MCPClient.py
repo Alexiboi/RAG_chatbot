@@ -74,7 +74,7 @@ class MCPClient:
         # model receives user message + List of available tools 
         response = self.client.responses.create(
             model=DEPLOYMENT_NAME,
-            input=[{"role": "user", "content": query}],
+            input=query, # query + history with query coming first
             tools=available_tools,
             max_output_tokens=1000,
         )

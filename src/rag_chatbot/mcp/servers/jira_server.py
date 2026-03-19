@@ -133,10 +133,10 @@ async def create_jira_issue(summary: str, description: str, proj_key: str) -> st
     if not response:
         return "Unable to make Jira Request"
     return f"""
-        "issue_key": {response['key']},
-        "issue_url":{jira_site}/browse/{response['key']},
-        "message": Jira issue **{response['key']}** created successfully"
-    """
+            "issue_key": {response['key']},
+            "issue_url":{jira_site}/browse/{response['key']},
+            "message": Jira issue **{response['key']}** created successfully"
+        """
 
 def main():
     mcp.run(transport="stdio")
