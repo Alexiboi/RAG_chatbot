@@ -108,7 +108,7 @@ layer(base);
 @layer base {
   body, html, #root {
     @apply text-main-text h-full;
-    background-color: #f8fafc;
+    background-color: #f5f3f0;
   }
 
   ::-webkit-scrollbar {
@@ -129,11 +129,11 @@ layer(base);
 }
 
 .bg-white {
-  background-color: #f8fafc;
+  background-color: #f5f3f0;
 }
 
 .bg-white\/60 {
-  background-color: rgba(252, 248, 251, 0.6);
+  background-color: rgba(245, 243, 240, 0.6);
 }
 
 .dark body, .dark html, .dark #root {
