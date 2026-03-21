@@ -9,17 +9,13 @@ load_dotenv()
 
 # Initialize FastMCP server
 mcp = FastMCP("jira_server")
-
-
-BASE_DOMAIN = "alexhanna413"
-JIRA_API_BASE = f"https://{BASE_DOMAIN}.atlassian.net/rest/api/3" # /issue is for creating issues
-
+JIRA_DOMAIN = os.getenv("JIRA_DOMAIN")
 JIRA_API_KEY = os.getenv("JIRA_API_TOKEN")
 JIRA_API_EMAIL = os.getenv("JIRA_EMAIL")
-
+JIRA_API_BASE = f"https://{JIRA_DOMAIN}/rest/api/3" 
 
 async def make_jira_issue_request(proj_key: str="KAN", summary: str="", description: str=""):
-    url = f"{JIRA_API_BASE}/issue"
+    url = f"{JIRA_API_BASE}/issue" # /issue is for creating issues
     headers = {
     "Accept": "application/json", # content type client receives
     "Content-Type": "application/json" # content type of request client sends
@@ -124,7 +120,7 @@ async def create_jira_issue(summary: str, description: str, proj_key: str) -> st
         description: description of the issue
         proj_key: project key specifying the project we want to create an Issue/task in
     """
-    jira_site = "https://alexhanna413.atlassian.net/"
+    jira_site = f"https://{JIRA_DOMAIN}.atlassian.net/"
 
     response = await make_jira_issue_request(
         proj_key=proj_key,

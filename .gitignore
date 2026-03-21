@@ -1,6 +1,5 @@
 # Environment variables / secrets
 .env
-.env.*
 confidential.env
 
 # Python
