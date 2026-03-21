@@ -66,9 +66,7 @@ class GeneralLLM:
     
 
 class MCPLLM:
-    path_to_server = str(
-        Path(__file__).resolve().parents[1] / "mcp" / "servers" / "jira_server.py"
-    )
+    server_module = "rag_chatbot.mcp.servers.jira_server"
     
     def __init__(self):
         self.client = MCPClient()
@@ -78,7 +76,7 @@ class MCPLLM:
         if self.connected:
             return
         try:
-            await self.client.connect_to_server(self.path_to_server)
+            await self.client.connect_to_server(self.server_module)
             self.connected = True
         except Exception as e:
             print(f"Exception occured {e}")

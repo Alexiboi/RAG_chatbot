@@ -26,22 +26,16 @@ class MCPClient:
             api_key=AZURE_OPENAI_API_KEY
         )
 
-    async def connect_to_server(self, server_script_path: str):
+    async def connect_to_server(self, server_module: str):
         """Connect to an MCP server
 
         Args:
             server_script_path: Path to the server script (.py or .js)
         """
-        is_python = server_script_path.endswith('.py')
-        is_js = server_script_path.endswith('.js')
-        if not (is_python or is_js):
-            raise ValueError("Server script must be a .py or .js file")
-
-        command = "python" if is_python else "node"
         server_params = StdioServerParameters(
-            command=command,
-            args=[server_script_path],
-            env=None
+            command="python",
+            args=["-m", server_module],
+            env={**os.environ, "PYTHONPATH": "src"},
         )
 
         stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
@@ -163,13 +157,11 @@ class MCPClient:
         """Clean up resources"""
         await self.exit_stack.aclose()
 
-async def main():
-    path_to_server = r"C:\Users\alexh\Desktop\LLM_uni_project\RAG_chatbot\src\rag_chatbot\mcp\servers\jira_server.py"
- 
-
+async def main():    
+    server_module = "rag_chatbot.mcp.servers.jira_server"
     client = MCPClient()
     try:
-        await client.connect_to_server(path_to_server)
+        await client.connect_to_server(server_module)
         await client.chat_loop()
     finally:
         await client.cleanup()
