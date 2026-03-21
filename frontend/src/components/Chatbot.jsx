@@ -23,12 +23,21 @@ function Chatbot() {
   const [openChatMenuId, setOpenChatMenuId] = useState(null);
   const [selectedMode, setSelectedMode] = useState("auto");
   const [chatPendingDelete, setChatPendingDelete] = useState(null);
+  const [fontScale, setFontScale] = useState(() => {
+    return parseInt(localStorage.getItem('fontScale')) || 100;
+  });;
 
   
   useEffect(() => {
     localStorage.setItem("chatMode", selectedMode);
   }, [selectedMode]);
 
+
+  useEffect(() => {
+    localStorage.setItem('fontScale', fontScale);
+    const scaleFactor = fontScale / 100;
+    document.documentElement.style.fontSize = (scaleFactor * 16) + 'px';
+  }, [fontScale]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -234,6 +243,11 @@ function Chatbot() {
     }
   };
 
+  const handleFontSizeChange = (delta) => {
+    const newScale = Math.max(80, Math.min(150, fontScale + delta));
+    setFontScale(newScale);
+  };
+
   return (
     <div className="flex h-screen min-h-0 overflow-hidden">
       <aside className="sticky top-0 h-screen w-64 shrink-0 border-r border-primary-blue/20 bg-white/60 p-4 flex flex-col">
@@ -352,6 +366,26 @@ function Chatbot() {
               <option value="rag">RAG</option>
               <option value="mcp">MCP</option>
             </select>
+          </div>
+
+          <div className="mb-6 flex items-center justify-between">
+            <span className="text-main-text">Font Size</span>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleFontSizeChange(-10)}
+                className="rounded-lg border border-primary-blue/20 px-3 py-1 text-main-text hover:bg-primary-blue/10 transition"
+              >
+                −
+              </button>
+              <span className="w-12 text-center text-sm text-main-text">{fontScale}%</span>
+              <button
+                onClick={() => handleFontSizeChange(10)}
+                className="rounded-lg border border-primary-blue/20 px-3 py-1 text-main-text hover:bg-primary-blue/10 transition"
+              >
+                +
+              </button>
+            </div>
           </div>
 
           <button
