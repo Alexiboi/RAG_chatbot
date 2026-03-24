@@ -5,11 +5,10 @@ from src.rag_chatbot.rag.embedding_utils import generate_embeddings
 from src.rag_chatbot.rag.env import client, deployment_name
 from src.rag_chatbot.rag.index_utils import TRANSCRIPT_SEARCH_CLIENT, MEETING_NOTES_SEARCH_CLIENT
 from azure.search.documents.models import VectorizedQuery
-from sentence_transformers import CrossEncoder
 import textwrap
 import langextract as lx
+from langextract.core.data import AnnotatedDocument
 
-K=30
 FINAL_K = 6
 
 class RetrievalRoute(BaseModel):
@@ -18,69 +17,6 @@ class RetrievalRoute(BaseModel):
     )
 
 
-def rerank(query, candidates, final_top_k: int = FINAL_K):
-    """
-    This probably won't be used as doesn't lead to performance improvement
-    """
-    model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
-    texts = []
-    idx_map = []  # maps rank-list index -> candidate index
-    for i, c in enumerate(candidates):
-        text = (c.get("content") or "").strip()
-        if not text:
-            continue
-        texts.append(text)
-        idx_map.append(i)
-
-    if not texts:
-        return []
-
-    # 2) Rank
-    # returns items in ranked order; when return_documents=True, it includes the text
-    ranked = model.rank(query, texts, return_documents=True)
-
-    ranked_texts = []
-    if isinstance(ranked, dict) and "documents" in ranked:
-        # sometimes { "documents": [...], "scores": [...] }
-        ranked_texts = ranked["documents"]
-    elif isinstance(ranked, list):
-        # often list of {"text": "...", "score": ...} OR list[str]
-        if ranked and isinstance(ranked[0], dict):
-            # common: [{"text": "...", "score": ...}, ...]
-            ranked_texts = [r.get("text") or r.get("document") or r.get("passage") for r in ranked]
-        else:
-            # could be list[str]
-            ranked_texts = ranked
-    else:
-        # fallback
-        ranked_texts = []
-
-    # 4) Map ranked texts back to candidate dicts
-    # If there are duplicates, this picks the first unused match.
-    text_to_candidate_idxs = {}
-    for j, t in enumerate(texts):
-        text_to_candidate_idxs.setdefault(t, []).append(j)
-
-    used = set()
-    reranked_candidates = []
-    for t in ranked_texts:
-        if not t:
-            continue
-        if t not in text_to_candidate_idxs:
-            continue
-        # pick first occurrence not used
-        for local_j in text_to_candidate_idxs[t]:
-            if local_j in used:
-                continue
-            used.add(local_j)
-            original_i = idx_map[local_j]
-            reranked_candidates.append(candidates[original_i])
-            break
-
-        if len(reranked_candidates) >= final_top_k:
-            break
-
-    return reranked_candidates
 
 def get_routing_prompt(query: str) -> str:
     return textwrap.dedent(f"""\
@@ -105,7 +41,6 @@ def get_routing_prompt(query: str) -> str:
     - Return "transcripts" if the query is primarily about earnings calls, companies, quarters, years, executives, or call discussions.
     - Return "meeting_notes" if the query is primarily about internal notes, project updates, sprint planning, milestones, tooling, an author, or a meeting date.
     - Return "both" only if the query is genuinely ambiguous or could reasonably refer to either source.
-    - Prefer the most specific source instead of "both" when possible.
 
     User query:
     {query}
@@ -122,20 +57,26 @@ def route_query(query: str) -> RetrievalRoute:
 
     return response.output_parsed
 
-def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
+def retrieve_context(query: str, k: int = FINAL_K) -> list:
     """
-    As of now this returns context results using a cosine similarity + BM25 from the query string embedding & content.
-    There could be better ways to do this.
-    
-    :param query: Description
-    :type query: str
-    :return: Description
-    :rtype: tuple[str, str]
+    Retrieves top K document chunks from the vector database based on a combination of cosine similarity and BM25 score
+    Firstly generates embeddings for query, then route's query to one about either transcripts, meeting notes or both.
+    Then retrieves filter text for Azure vector search.
+
+    Args:
+        query (str): User's query
+        k (int): parameter to specify how many closest K documents to retrieve
+
+    Returns:
+        list: list of K closest document chunks
     """
     query_embedding = generate_embeddings([query])[0]
+
+    # route deterimes which metadata fields should be filtered from filter text if any
     route = route_query(query)
 
-    filter_text = retrieve_filter(query)
+    # get values for fields that will be used to build the filter text
+    filter_metadata = retrieve_filter_metadata(query)
     
     vector_query = VectorizedQuery(
         vector=query_embedding,
@@ -146,7 +87,7 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
     combined = []
     # rather than retrieving context and filters for both types of documents we could route to specific ones based on the query
     if route.source in ("transcripts", "both"):
-        transcript_filter = safe_filter_for_index(filter_text, "transcripts")
+        transcript_filter = create_safe_filter_for_index(filter_metadata, "transcripts")
         transcript_results = TRANSCRIPT_SEARCH_CLIENT.search(
             search_text=query, # hybrid retrieval: populating search_text leads to BM25 score search as well as vector comparison
             vector_queries=[vector_query],
@@ -160,7 +101,7 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
             combined.append(r_dict)
 
     if route.source in ("meeting_notes", "both"):
-        meeting_filter = safe_filter_for_index(filter_text, "meeting_notes")
+        meeting_filter = create_safe_filter_for_index(filter_metadata, "meeting_notes")
         meeting_results = MEETING_NOTES_SEARCH_CLIENT.search(
             search_text=query, # hybrid retrieval: populating search_text leads to BM25 score search as well as vector comparison
             vector_queries=[vector_query],
@@ -183,49 +124,69 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list[dict]:
     return combined_sorted[:k]
     
 
-def safe_filter_for_index(filter_text: str, index_kind: str) -> str | None:
+def create_safe_filter_for_index(metadata: dict, index_kind: str) -> str:
     """
-    index_kind: "transcripts" or "meeting_notes"
+    Generates filter text from the metadata and filters out any metadata fields
+    that are not in the search index. E.g. if metadata
+
+
+    Args:
+        filter_text (dict): filter that will be applied to azure search index e.g. 'author eq John'
+        index_kind (str): "transcripts" or "meeting_notes"
+    
+    Returns:
+        str | None: returns None if the filter contains elements that are unsafe for the index, otherwise returns the filter_text unchanged
+
     """
-    if not filter_text:
-        return None
+    # Only include fields supported by index
+    allowed = {
+        "transcripts": {"docType", "company", "quarter", "year"},
+        "meeting_notes": {"docType", "author", "meetingDate"},
+    }
 
-    if index_kind == "transcripts":
-        # transcripts support: docType, company, quarter, year (example)
-        # If the filter is clearly meeting_note-specific, skip it for transcripts.
-        if "author" in filter_text or "meetingDate" in filter_text:
-            #return "docType eq 'earnings_call'"  # or None to not filter at all
-            return None
-        return filter_text
+    allowed_fields = allowed.get(index_kind, set())
 
-    if index_kind == "meeting_notes":
-        # meeting_notes support: docType, author, meetingDate
-        # If the filter is earnings_call-specific, skip it for meeting notes.
-        if "company" in filter_text or "quarter" in filter_text or "year" in filter_text:
-            #return "docType eq 'meeting_note'"  # or None
-            return None
-        return filter_text
+    filtered_meta = {
+        k: v for k, v in metadata.items() if k in allowed_fields
+    }
 
-    return None
+    return build_filter(filtered_meta)
 
 
-def retrieve_filter(query: str) -> str:
+def retrieve_filter_metadata(query: str) -> dict:
+    """
+    Runs full pipeline of retrieving metadata as a langextract object from query, then converting that to a dictionary of metadata,
+    then building a string filter text that can be used in Azure AI search
+
+    Args:
+        query (str): User's query
+    
+    Returns:
+        dict: metadata where keys are fields and values are values for those fields extracted from query
+    """
     result = return_metadata(query)
     metadata = langextract_to_metadata(result)
-    filter = build_filter(metadata)
-    return filter
+    return metadata
 
     
 
-def return_metadata(query: str) -> str:
+def return_metadata(query: str) -> AnnotatedDocument:
     """
-    Extracts metadata fields and creates filter for azure ai search in order to narrow down retrieved documents
+    Extracts specific classes from the query to be used as metadata for future filter text. Uses few-shot prompting which provide examples of which
+    metadata fields should be extracted.
+
+    Args:
+        query (str): The user's query
+    
+    Returns:
+        AnnotatedDocument: langextract AnnotatedDocument object which contains attributes and other fields
     
     :param query: Description
     :type query: str
     :return: Description
     :rtype: str
     """
+    # Build prompt for metadata extractor LLM:
     prompt = textwrap.dedent("""\
     You are an information extraction system for building Azure AI Search filters.
 
@@ -259,6 +220,7 @@ def return_metadata(query: str) -> str:
     * author -> {"author": "<exact or normalized if obvious>"}
     * meetingDate -> {"meetingDate": "<as written>"}\
     """)
+    # Provide example for metadata extractor LLM:
     examples = [
         lx.data.ExampleData(
             text=(
@@ -327,101 +289,188 @@ def return_metadata(query: str) -> str:
     return result
 
 
-def langextract_to_metadata(annotated_doc):
+def langextract_to_metadata(annotated_doc: AnnotatedDocument) -> dict:
     """
-    Convert LangExtract AnnotatedDocument into structured metadata dict.
+    Convert LangExtract AnnotatedDocument into structured metadata dict. Also supports multiple attributes, e.g. if a query mentioned multiple companies or years
+
+    Args:
+        annotated_doc (AnnotatedDocument): langextract AnnotatedDocument object
+    
+    Returns:
+        dict: metadata structured in a dictionary format with each key referencing a list of 1 or more attributes
     """
 
     metadata = {
         # earning call metadata
-        "docType": None,
-        "company": None,
-        "year": None,
-        "quarter": None,
-        "reportDate": None,
+        "docType": [],
+        "company": [],
+        "year": [],
+        "quarter": [],
         # Meeting notes metadata
-        "meetingDate": None,
-        "author": None
+        "meetingDate": [],
+        "author": []
 
     }
 
     for extraction in annotated_doc.extractions:
+        
         attrs = extraction.attributes or {}
-
-        # document type
+        print(f"\n attribute: {attrs}")
         if "document_type" in attrs:
-            metadata["docType"] = attrs["document_type"]
+            metadata["docType"].append(attrs["document_type"])
 
-        # company
         if "company" in attrs:
-            metadata["company"] = attrs["company"]
+            metadata["company"].append(attrs["company"])
 
-        # year
         if "year" in attrs:
             try:
-                metadata["year"] = int(attrs["year"])
+                metadata["year"].append(int(attrs["year"]))
             except:
                 pass
 
-        # quarter
         if "quarter" in attrs:
             try:
-                metadata["quarter"] = int(attrs["quarter"])
+                metadata["quarter"].append(int(attrs["quarter"]))
             except:
                 pass
         
         if "author" in attrs:
             try:
-                metadata["author"] = attrs["author"]
+                metadata["author"].append(attrs["author"])
             except:
                 pass
 
         if "meetingDate" in attrs:
             try:
-                metadata["meetingDate"] = datetime.strptime(
+                metadata["meetingDate"].append(datetime.strptime(
                     attrs["meetingDate"], "%Y/%m/%d"
-                ).isoformat() + "Z"
+                ).isoformat() + "Z")
             except Exception as e:
                 raise(e)
-                
 
-    # Derive reportDate deterministically
-    if metadata["year"] and metadata["quarter"]:
-        month = metadata["quarter"] * 3
-        metadata["reportDate"] = datetime(
-            metadata["year"], month, 1
-        ).isoformat() + "Z"
-
-
+    # post-processing: remove any duplicate attributes (e.g. year: [2024,2024] -> year: [2024])
+    for key in metadata:
+        metadata[key] = list(set(metadata[key]))
 
     return metadata
 
-def build_filter(meta):
+def build_filter(meta: dict) -> str:
+    """
+    Construct a complete azure search filter string from extracted metadata.
+
+    This function:
+    - Iterates over known metadata fields (e.g. company, year, quarter)
+    - Builds a filter clause for each field using `build_or`
+    - Combines all field clauses using AND
+
+    Each field can produce:
+    - A single equality condition (e.g. "year eq 2024")
+    - An OR group if multiple values exist
+      (e.g. "(company eq 'Apple' or company eq 'Agilent')")
+
+    Args:
+        meta (dict):
+            Dictionary containing extracted metadata, where each key maps
+            to a list of values. Example:
+            {
+                "docType": ["earnings_call"],
+                "company": ["Apple", "Agilent"],
+                "year": [2024],
+                "quarter": [2, 4],
+                "meetingDate": [],
+                "author": []
+            }
+
+    Returns:
+        str:
+            A valid Azure AI Search OData filter string combining all fields.
+            Example output:
+            "docType eq 'earnings_call' and
+             (company eq 'Apple' or company eq 'Agilent') and
+             year eq 2024 and
+             (quarter eq 2 or quarter eq 4)"
+
+            Returns an empty string if no filters are generated.
+    """
+
     parts = []
 
-    if meta["docType"]:
-        parts.append(f"docType eq '{meta['docType']}'")
-    if meta["company"]:
-        parts.append(f"company eq '{meta['company']}'")
-    if meta["year"]:
-        parts.append(f"year eq {meta['year']}")
-    if meta["quarter"]:
-        parts.append(f"quarter eq '{meta['quarter']}'")
-    if meta["author"]:
-        parts.append(f"author eq '{meta['author']}'")
-    if meta["meetingDate"]:
-        parts.append(f"meetingDate eq {meta['meetingDate']}")
+    def build_or(field: str, values: list, is_string: bool = False, is_datetime: bool = False) -> str | None:
+        """
+        Build an azure search filter clause for a single field (year, company...)
+        This function converts a list of values into:
+        - a single 'eq' condition if one value is provided
+        - an OR-combined group of 'eq' conditions if multiple values are provided
+
+        Args:
+            field (str): The field name in the Azure Search index (e.g. "company", "year")
+            values (list): List of values to filter on
+            is_string (bool): Whether the field is a string (wrap in quotes)
+            is_datetime (bool): Whether the field is a DateTimeOffset (ISO string, no quotes)
+
+        Returns:
+            str | None:
+                - A valid OData filter clause (e.g. "company eq 'Apple'" or
+                "(company eq 'Apple' or company eq 'Agilent')")
+                - None if the values list is empty
+        """
+        if not values:
+            return None
+
+        if len(values) == 1:
+            v = values[0]
+            if is_string:
+                return f"{field} eq '{v}'" # if the field is a string in search index it must be wrapped in ''
+            elif is_datetime:
+                return f"{field} eq {v}"  # already ISO string
+            else:
+                return f"{field} eq {v}"
+
+        # multiple values → OR
+        conditions = []
+        for v in values:
+            if is_string:
+                conditions.append(f"{field} eq '{v}'")
+            elif is_datetime:
+                conditions.append(f"{field} eq {v}")
+            else:
+                conditions.append(f"{field} eq {v}")
+
+        return "(" + " or ".join(conditions) + ")"
+
+    # (field, is_string, is_datetime)
+    mappings = [
+        ("docType", True, False),
+        ("company", True, False),
+        ("year", False, False),
+        ("quarter", False, False),
+        ("author", True, False),
+        ("meetingDate", False, True),
+    ]
+
+    for field, is_string, is_datetime in mappings:
+        clause = build_or(field, meta.get(field, []), is_string, is_datetime)
+        if clause:
+            parts.append(clause)
 
     return " and ".join(parts)
 
-if __name__ == "__main__":
-    test_query = """
-            Summarise discussions about product strategy and roadmap across both
-            internal meeting notes and company transcripts.
-            """
 
-    route = route_query(test_query)
-    print(route)
+if __name__ == "__main__":
+    pass
+    test_query = """
+            Can you summarize the earning call from Apple and Reuben's meeting notes
+            """
+    print(retrieve_context(test_query))
+    # # route = return_metadata(test_query)
+    # # metadata = langextract_to_metadata(route)
+    # # filter_text = build_filter(metadata)
+    # # print("\n")
+    # # print(type(route))
+    # # print("\n")
+    # # print(metadata)
+    # # print("\n")
+    # # print(filter_text)
    
 
 
