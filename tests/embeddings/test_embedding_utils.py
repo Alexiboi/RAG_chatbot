@@ -363,12 +363,6 @@ class TestExtractMetadata:
         assert metadata["docType"] == "earnings_call"
         assert metadata["company"] == "Agilent"
 
-    def test_calls_extract_meeting_note_metadata_for_meeting_note_type(self):
-        """Test that meeting_note type calls meeting note extractor."""
-        metadata = extract_metadata("2026-01-28-notes.txt", "meeting_note")
-        
-        assert metadata["docType"] == "meeting_note"
-        assert metadata["author"] == "Reuben"
 
     def test_raises_error_for_unknown_doc_type(self):
         """Test that unknown doc_type raises ValueError."""

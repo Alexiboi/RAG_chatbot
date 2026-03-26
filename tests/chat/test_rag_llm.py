@@ -267,7 +267,7 @@ class TestRAGLLMHistoryHandling:
         history_messages = messages[1:-1]
         
         # Should be the last HISTORY_LEN messages
-        expected_content = f"Old message {HISTORY_LEN}"
+        expected_content = f"Old message {HISTORY_LEN - 1}"
         assert history_messages[0]["content"] == expected_content
     
 

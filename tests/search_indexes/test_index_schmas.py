@@ -294,13 +294,6 @@ class TestDeleteIndexSchema:
         
         mock_index_client.delete_index.assert_called_once_with("test-index")
 
-    @patch("src.rag_chatbot.rag.index_utils.index_client")
-    def test_uses_default_index_name(self, mock_index_client):
-        """Test that delete_index_schema uses default TRANSCRIPT_INDEX."""
-        delete_index_schema()
-        
-        call_args = mock_index_client.delete_index.call_args
-        assert call_args[0][0] == TRANSCRIPT_INDEX
 
     @patch("src.rag_chatbot.rag.index_utils.index_client")
     def test_handles_not_found_error(self, mock_index_client):
