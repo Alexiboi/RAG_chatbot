@@ -1,46 +1,149 @@
 
-# RAG Chatbot
+# Employee assistant chatbot 
 
-A Retrieval-Augmented Generation (RAG) chatbot that answers questions about meeting call transcripts using vector search and Azure OpenAI.
+A chatbot designed to help employees answer company specific queries and perform actions on external services (E.g. creating tickets on Jira). This has been achieved using a combination of RAG & MCP
+
+## Overview
+
+This project is a full-stack AI system that:
+- Uses an advanced RAG system to answer questions that require specific documentation context to answer.
+
+- The data the AI has access to for the purposes of RAG is mainly earnings calls and some meeting notes. Earning calls were used as a proxy to meeting transcripts as they have a similar structure.
+
+- Has access to a custom built MCP server which exposes the LLM to several tools that it can use to communicate with external services (Jira)
+Purpose:
+- The purpose of this project is to provide a strong foundation that can be scaled and built upon to demonstrate how robust and custom AI's can be developed to aid enterprises and their employees in trivial tasks that may waste time.
+
+- For example rather than searching exhaustively through an unstructured databse trying to find information an employee may need, a query could be sent to the chatbot to retrieve this information and answer the question.
+
+- The system was built with employees in mind, part of the project development process involved Q&A sessions with employees of a company and gathering user requirements & functionality they would like.
+
+- With the utilization of MCP the chatbot could have access to many external services that have publicly accessible API's or their own MCP integration. Right now this AI only has access to Jira and only a few endpoints but the architecture is very scalable.
+
+## Architecture
+
+The system consists of:
+- **Frontend**: Chat interface for user interaction (React + JS).
+- **Backend**:
+    - *RAG pipeline*:
+    - Methods to upload documents to an Azure Blob Storage container.
+    
+    - Methods to create search indexes in Azure AI search
+
+    - Methods that chunk, create embeddings and store chunks in Azure AI search indexes (vector DB).
+
+    - Context based chunking: Based on Anthropic article, appends brief context text to chunks for the benifit of improved accuracy on retrieval.
+
+    - Extraction of metadata from user queries to create filters.
+     
+    - Generating embeddings of user query to find most similar documents in Azure AI search indexes.
+
+    - Using a combination of filters, vector similarity scores and BM25 scores to retrieve top K most similar documents based on the user's query.
+
+    - *MCP layer*:
+    - MCP client which is given access to tools exposed on MCP server and is able to call tools.
+    - MCP server which exposes tools (like Jira API)
+
+    - *Routing*:
+    - User querie's are routed by either manual input or automatically decided by an LLM to specific functionalities (e.g. RAG mode, MCP mode, General mode)
+    
+    - *Redis data store*:
+    - Redis is used as a lightweight in-memory database to store past chats and chat messages within specific chats.
+    - Allows chats to persist and LLM's to be given chat history when prompted so LLM has 'memory' of current chat.
+**Evaluation**:
+    - Evaluation pipeline which allows experiments to be run and results to be displayed on LangSmith.
+    - Experiments used to provide empirical data on how well the AI is performing for both retrieval and generation (RAG only).
+    - A combination of traditional deterministic metrics such as recall, accuracy, MAP and MRR as well as LLM's as a judge are used to provide scores between 0 and 1 of performance relating to retrieval and generation.
+
+## Project Structure
+
+RAG_chatbot/
+  evaluation/ (evaluators and experiment running)
+    evaluators/
+  frontend/
+    public/
+    src/
+  scripts/ (cmd line scripts)
+  src/
+    backend/
+        mcp/
+        rag/
+        redis/
+        backend_api.py (fastAPI router)
+        main.py (fastAPI server)
+  tests/ (unit tests for backend)
 
 ## Features
 
-- **Vector Search**: Uses embeddings to find relevant transcript chunks
-- **Azure Integration**: Leverages Azure Blob Storage, Cognitive Search, and OpenAI
-- **Semantic Understanding**: Powered by text-embedding-3-large for accurate context retrieval
-- **LLM Responses**: Generates answers based on retrieved transcript context
+- Uploading of documents to Blob storage.
+- Embedding and uploading of chunks to Azure AI search indexes.
+- Creation of search indexes in Azure AI search.
+- Metadata filtering and custom filter's for each type of search index (e.g. author for meeting notes and company+quarter for earning calls).
+- Hybrid retrieval (vector + BM25).
+- MCP-based tool calling.
+- Custom MCP server that can be scaled up to add more tools/endpoints.
+- Jira issue creation via natural language.
+- Combining MCP and RAG by retrieving information from documents using RAG, then creating tasks in Jira from that information using MCP.
+- Contextual chunking using LLM.
+- Redis storage of chat's and chat messages
+- Frontend for entering user queries and browsing past chats
+- Query routing so user's can choose which mode they want to be in (MCP only, RAG only, general LLM)
+- Experimentation pipeline using LangSmith
 
 ## Setup
 
 1. Clone the repository
-2. Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-3. Create a `confidential.env` file with:
-    ```
-    BLOB_SAS_URL=<your_blob_url>
-    AZURE_OPENAI_API_KEY=<your_api_key>
-    AZURE_SEARCH_ENDPOINT=<your_search_endpoint>
-    AZURE_SEARCH_KEY=<your_search_key>
-    ```
+2. Ensure docker installed
+3. Create a `.env` file following the `.env.example`
 
-## Usage
+## Example Usage/Queries
 
-Run the application:
-```bash
-python src/rag/RAG_bot.py
-```
+- Any query like "Help" or "How do you work?" will allow the chatbot to explain it's functionality and modes.
+Mode selector:
+- Mode selector left of chat input specifies the mode the chatbot is in. "Auto" implies an LLM decides what mode to be in based on the user's query. E.g. if the user's query mentions retrieving information from documents, the AI will route to RAG mode.
+    - Other modes are "General" which is for general queries not requiring retrieval or external actions.
+    - "RAG" is used to answer questions that require external context.
+    - "MCP" is used to perform actions on external services like Jira. "MCP" is also the mode to be in if you need to combine RAG and MCP. For example: "Create a Jira issue based on this Epic in these meeting notes".
 
-### Commands
 
-1. **Chunk** - Process transcripts and store embeddings in vector database
-2. **Query** - Ask questions about transcript content
-3. **Exit** - Close the application
+## Tech Stack
 
-## Architecture
+- Backend: FastAPI
+- LLM: OpenAI (GPT / embeddings)
+- Search: Azure AI search
+- Tooling: Docker, Redis
+- Frontend: React
+- Testing: Pytest
 
-- **Text Splitting**: Chunks transcripts into manageable segments
-- **Embeddings**: Converts text to vectors for semantic search
-- **Vector Database**: Stores and retrieves similar chunks
-- **LLM**: Generates contextual responses using GPT-4 mini
+
+## Testing
+
+- Unit tests for:
+  - metadata extraction
+  - filter building
+  - indexing pipeline
+- Mocked Azure + MCP dependencies
+- Run tests:
+pytest
+
+
+## Limitations
+
+- Retrieval performance may be negatively affected with more documents in the search indexes.
+- MCP server only exposes a few tools and only supports Jira actions as of now.
+- The file structure for Blobs in the blob storage must formatted in a very specific away for metadata to correctly be added.
+- Testing using LLM's as a judge is non-deterministic and therefore fuzzy.
+- Routing using "Auto" is also non-deterministic and can be wrong sometimes
+- Retrieval performance can be poor at times, depending on the wording of queries. Advanced techniques like reranking may improve this.
+
+## Future Work
+
+- Streaming responses
+- Better query routing
+- More MCP tools (Slack, email, etc.)
+- Improved evaluation metrics for retrieval quality
+- Improve retrieval accuracy using advanced RAG techniques
+- Migrating from Redis to relational DB
+- linking of Azure accounts, Azure storage + search indexes and Jira accounts for deployment
+
+
