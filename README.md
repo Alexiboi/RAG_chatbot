@@ -56,7 +56,7 @@ The system consists of:
     - A combination of traditional deterministic metrics such as recall, accuracy, MAP and MRR as well as LLM's as a judge are used to provide scores between 0 and 1 of performance relating to retrieval and generation.
 
 ## Project Structure
-
+```
 RAG_chatbot/
   evaluation/ (evaluators and experiment running)
     evaluators/
@@ -72,6 +72,7 @@ RAG_chatbot/
         backend_api.py (fastAPI router)
         main.py (fastAPI server)
   tests/ (unit tests for backend)
+```
 
 ## Features
 
