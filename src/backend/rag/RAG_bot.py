@@ -93,7 +93,7 @@ class MCPLLM:
         connected (bool): Tracks whether the client is connected.
     """
 
-    server_module = "rag_chatbot.mcp.servers.jira_server"
+    server_module = "src.backend.mcp.servers.jira_server"
 
     def __init__(self):
         self.client = MCPClient()
@@ -166,6 +166,7 @@ class RAGLLM:
         context_texts = [doc["content"] for doc in context]
 
         context_block = "\n\n---\n\n".join(context_texts) # join to form one big string for ingestion into message to LLM
+
         messages = [
             {
                 "role": "system",
@@ -342,7 +343,7 @@ async def handle_chat(user_query: str, history: list[dict], mode: str = "auto") 
         }
      
     elif route == "rag":
-        context = retrieve_context(user_query)
+        context = retrieve_context(user_query, k=6)
         # fallback in case there is no context for some reason
         if not context:
             return {

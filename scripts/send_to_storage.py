@@ -1,5 +1,6 @@
 from azure.storage.blob import ContainerClient
 import pandas as pd 
+from src.backend.rag.env import TRANSCRIPT_SAS_URL
 
 folder_path = "earnings_calls"  # virtual folder 
 
@@ -85,6 +86,6 @@ def send_to_storage(container_client_url: str, data_file: str, ind: int = 5):
     print(f"Uploaded '{transcript_name}' to container '{container_client.container_name}' at path '{blob_name}'")
 
 if __name__ == "__main__":
-    pass
-    #send_to_storage()
+    #pass
+    send_to_storage(TRANSCRIPT_SAS_URL, "./data/2024-earnings-call-transcript.json")
 

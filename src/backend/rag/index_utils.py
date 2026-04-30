@@ -64,7 +64,7 @@ def ensure_index_exists(index_name: str) -> None:
         )
 
 
-def create_or_update_indexes():
+def create_or_update_indexes(transcripts: bool, index_name: str):
     """
     Create or update all required Azure Search indexes.
 
@@ -80,10 +80,12 @@ def create_or_update_indexes():
     Side Effects:
         - Modifies Azure Search indexes
     """
-    index_client.create_or_update_index(create_transcript_index_schema(TRANSCRIPT_INDEX))
-    print(f"{TRANSCRIPT_INDEX} created/updated.")
-    index_client.create_or_update_index(create_meeting_notes_index_schema(MEETING_NOTES_INDEX))
-    print(f"{MEETING_NOTES_INDEX} created/updated.")
+    if transcripts:
+        index_client.create_or_update_index(create_transcript_index_schema(index_name))
+        print(f"{index_name} created/updated.")
+    else:
+        index_client.create_or_update_index(create_meeting_notes_index_schema(MEETING_NOTES_INDEX))
+        print(f"{MEETING_NOTES_INDEX} created/updated.")
     
 
 
@@ -258,4 +260,9 @@ def create_meeting_notes_index_schema(index_name: str=MEETING_NOTES_INDEX) -> Se
 
 
 if __name__ == "__main__":
+    #delete_index_schema(TRANSCRIPT_INDEX)
+    #create_or_update_indexes(True, TRANSCRIPT_INDEX)
+    index = index_client.get_index(TRANSCRIPT_INDEX)
+    for config in index.semantic_search.configurations:
+        print(config.name)
     pass

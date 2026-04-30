@@ -2,7 +2,7 @@
 from collections import defaultdict
 from typing import Any
 from src.backend.rag.env import EMBEDDING_CLIENT
-from src.backend.rag.index_utils import TRANSCRIPT_SEARCH_CLIENT, MEETING_NOTES_SEARCH_CLIENT, ensure_index_exists
+from src.backend.rag.index_utils import TRANSCRIPT_SEARCH_CLIENT, MEETING_NOTES_SEARCH_CLIENT, ensure_index_exists, make_search_client
 import hashlib
 import re
 from datetime import datetime
@@ -36,7 +36,7 @@ def generate_embeddings(texts: list[str]) -> list[list[float]]:
     )
     return [item.embedding for item in response.data]
         
-def process_and_store_chunks(chunks: list[dict]) -> dict[str, list[IndexingResult]]:
+def process_and_store_chunks(index_name, chunks: list[dict]) -> dict[str, list[IndexingResult]]:
     """
     Processes a list of text chunks then uploads them to an azure search index by:
     1. Grouping them by document type (docType)
@@ -78,7 +78,7 @@ def process_and_store_chunks(chunks: list[dict]) -> dict[str, list[IndexingResul
     results: dict[str, list[IndexingResult]] = {}
 
     for doc_type, group_chunks in grouped.items():
-        search_client = get_search_client_for_doc_type(doc_type)
+        search_client = get_search_client_for_doc_type(index_name, doc_type)
 
         # check if index exists before attempting upload
         ensure_index_exists(search_client._index_name)
@@ -116,7 +116,8 @@ def process_and_store_chunks(chunks: list[dict]) -> dict[str, list[IndexingResul
             }
             documents.append(upsert_data)
 
-        results[doc_type] = search_client.upload_documents(documents=documents)
+        #results[doc_type] = search_client.upload_documents(documents=documents)
+        upload_in_batches(search_client, documents, 100)
 
     """
     Example of results:
@@ -138,8 +139,15 @@ def process_and_store_chunks(chunks: list[dict]) -> dict[str, list[IndexingResul
 
     return results
 
+# Split into smaller batches:
+def upload_in_batches(client, documents, batch_size=100):
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        client.upload_documents(documents=batch)
+        print(f"Uploaded {min(i + batch_size, len(documents))}/{len(documents)}")
 
-def get_search_client_for_doc_type(doc_type: str) -> SearchClient:
+
+def get_search_client_for_doc_type(index_name, doc_type: str) -> SearchClient:
     """
     Retrieves search index for that chunks will be uploaded too, matching the search index passed into doc_type
 
@@ -149,7 +157,7 @@ def get_search_client_for_doc_type(doc_type: str) -> SearchClient:
         SearchClient: returns azure vector DB index search client corresponding to respective document type
     """
     if doc_type == "transcript":
-        return TRANSCRIPT_SEARCH_CLIENT
+        return make_search_client(index_name)
     if doc_type == "meeting_note":
         return MEETING_NOTES_SEARCH_CLIENT
     raise ValueError(f"Unknown doc_type: {doc_type}")
@@ -188,7 +196,7 @@ def make_chunk_id(source_name: str, chunk: str, doc_type: str) -> str:
             Example:
             "earnings_call-report_q2_2024-1a2b3c4d5e6f7g8h"
     """
-    h = hashlib.sha1((doc_type + "\n" + source_name + "\n" + chunk).encode("utf-8")).hexdigest()[:16]
+    h = hashlib.sha1((doc_type + "\n" + source_name + "\n" + chunk).encode("utf-8")).hexdigest()[:16] # remove chunk tet
     base = re.sub(r"[^a-zA-Z0-9_\-=]", "-", source_name)  # stricter: replace anything unsafe
     return f"{doc_type}-{base}-{h}"
 

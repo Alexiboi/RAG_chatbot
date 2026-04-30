@@ -75,7 +75,7 @@ def route_query(query: str) -> RetrievalRoute:
 
     return response.output_parsed
 
-def retrieve_context(query: str, k: int = FINAL_K) -> list:
+def retrieve_context(query: str, filter: bool = False, k: int = FINAL_K) -> list:
     """
     Retrieves top K document chunks from the vector database based on a combination of cosine similarity and BM25 score
     Firstly generates embeddings for query, then route's query to one about either transcripts, meeting notes or both.
@@ -90,17 +90,17 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list:
     """
     query_embedding = generate_embeddings([query])[0]
 
-    # route deterimes which metadata fields should be filtered from filter text if any
-    route = route_query(query)
-
-    # get values for fields that will be used to build the filter text
-    filter_metadata = retrieve_filter_metadata(query)
-    
     vector_query = VectorizedQuery(
         vector=query_embedding,
         k_nearest_neighbors=k,
         fields="embedding"
     )
+
+    # route deterimes which metadata fields should be filtered from filter text if any
+    route = route_query(query)
+
+    # get values for fields that will be used to build the filter text
+    filter_metadata = retrieve_filter_metadata(query)
     
     combined = []
     # rather than retrieving context and filters for both types of documents we could route to specific ones based on the query
@@ -141,6 +141,8 @@ def retrieve_context(query: str, k: int = FINAL_K) -> list:
 
     return combined_sorted[:k]
     
+
+        
 
 def create_safe_filter_for_index(metadata: dict, index_kind: str) -> str:
     """

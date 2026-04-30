@@ -107,7 +107,7 @@ class MCPClient:
             model=DEPLOYMENT_NAME,
             input=query, # query + history with query coming first
             tools=available_tools,
-            max_output_tokens=1000,
+            max_output_tokens=5000,
         )
 
         # response of LLM will be the type (function_call) 
@@ -195,7 +195,7 @@ class MCPClient:
         await self.exit_stack.aclose()
 
 async def main():    
-    server_module = "rag_chatbot.mcp.servers.jira_server"
+    server_module = "src.backend.mcp.servers.jira_server"
     client = MCPClient()
     try:
         await client.connect_to_server(server_module)

@@ -146,20 +146,20 @@ class LLMJudge:
 
         <Rubric>
 
-        A correct response:
-        - Accurately answers the user’s query
-        - Matches the key facts and conclusions in the sample response
-        - Contains no contradictions with the sample response
-        - Does not introduce incorrect factual information
-        - Provides the essential information required by the query
+        Score 1.0 — Fully correct:
+        - Accurately answers the query
+        - Matches all key facts in the sample response
+        - No contradictions or omissions of essential information
 
-        An incorrect response:
+        Score 0.5 — Partially correct:
+        - Answers the query in part
+        - Captures some but not all key facts from the sample response
+        - Contains no direct contradictions but omits important details
+
+        Score 0.0 — Incorrect:
         - Contradicts the sample response on key facts
-        - Contains major factual errors
-        - Omits essential required information
-        - Answers a different question
-        - Introduces false or misleading claims
-
+        - Contains major factual errors or introduces false claims
+        - Omits all essential information or answers the wrong question
         </Rubric>
 
         <Instructions>
@@ -167,16 +167,16 @@ class LLMJudge:
         - Read the sample response to understand the ground-truth answer
         - Identify the key factual claims in the model response
         - Compare each claim against the sample response
-        - Determine whether the model response is fully correct or not
+        - Assign a score of 0.0, 0.5, or 1.0 based on the rubric above
 
         </Instructions>
 
         <Reminder>
         Focus strictly on factual correctness relative to the sample response.
         Do not evaluate writing style or fluency.
-        Minor wording differences are acceptable if the factual meaning is preserved.
-        Any major contradiction or key factual error should result in "incorrect".
-        If essential information is missing, the response should be marked "incorrect".
+        Any major contradiction or key factual error should result in 0.0.
+        If some but not all key facts are present with no contradictions, assign 0.5.
+        Only assign 1.0 if all key facts are present and accurate.
 
         </Reminder>
 
@@ -194,7 +194,7 @@ class LLMJudge:
         {model_response}
         </model_response>
 
-        Return your judgment in structured JSON format.
+        Return your judgment in structured JSON format with a numeric score (0.0, 0.5, or 1.0) and a rationale.
         """,
     }
 
@@ -203,7 +203,7 @@ class LLMJudge:
         self.run = run
         self.example = example
 
-    def compact_docs(self, docs, max_docs=6, max_chars=600):
+    def compact_docs(self, docs, max_docs=50, max_chars=5000):
         compact = []
         for d in docs[:max_docs]:
             if isinstance(d, dict):
@@ -355,14 +355,11 @@ class AnswerCorrectnessJudge(LLMJudge):
         msg = self.instructions["correctness"].format(query=question, sample_response=sample_response, model_response=answer)
 
         # Call the LLM to judge the output
-        response = self.returnResponse(msg, Response)
-
-        # response is already parsed
-        score = 1.0 if response.output else 0.0
+        response = self.returnResponse(msg, CorrectnessResponse)
 
         return {
-            "key": "answer_correctness_binary",
-            "score": score,
+            "key": "answer_correctness",
+            "score": response.score,
             "comment": (
                 f"rationale: {response.rationale}\n"
                 f""
@@ -370,7 +367,11 @@ class AnswerCorrectnessJudge(LLMJudge):
         }
         
 
+class CorrectnessResponse(BaseModel):
+    score: float = Field(..., description="0.0 = incorrect, 0.5 = partially correct, 1.0 = fully correct")
+    rationale: str = Field(..., description="Brief reason for the score (1-3 sentences).")
+
 class Response(BaseModel):
-        # output can be relevance, faithfulness, correctness
-        output: bool = Field(..., description="True or False depending on the judge criteria")
-        rationale: str = Field(..., description="Brief reason for the decision (1-3 sentences).")
+    # output can be relevance, faithfulness, correctness
+    output: bool = Field(..., description="True or False depending on the judge criteria")
+    rationale: str = Field(..., description="Brief reason for the decision (1-3 sentences).")
